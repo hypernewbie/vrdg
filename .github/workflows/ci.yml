@@ -31,7 +31,11 @@ jobs:
         key: ${{ runner.os }}-build-${{ hashFiles('CMakeLists.txt', 'vrdg.h', 'vrdg.py', 'test.cpp') }}
         restore-keys: |
           ${{ runner.os }}-build-
-    
+
+    - name: Clean stale CMake cache
+      shell: bash
+      run: rm -f build/CMakeCache.txt
+
     - name: Configure CMake (Windows)
       if: runner.os == 'Windows'
       run: cmake -S . -B build
