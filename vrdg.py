@@ -64,12 +64,53 @@ IOTYPE_TO_ATTACH["Create_TextureFB"] = "VRDG_TYPE_FB"
 # ---------------------------------------------------- Helper functions ----------------------------------------------------------
 
 
-def getLineArguments(line):
+def _extract_args_segment(line):
+    start = line.find("(")
+    if start == -1:
+        return ""
+
+    depth = 0
+    for i in range(start, len(line)):
+        ch = line[i]
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return line[start + 1 : i]
+
+    return line[start + 1 :]
+
+
+def _split_args(segment):
     args = []
-    lineArgsStr = line[line.find("(") + 1 : line.find(")")]
-    for arg in lineArgsStr.split(","):
-        args.append(arg.strip())
+    buf = []
+    depth = 0
+    for ch in segment:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+
+        if ch == "," and depth == 0:
+            args.append("".join(buf).strip())
+            buf = []
+            continue
+
+        buf.append(ch)
+
+    tail = "".join(buf).strip()
+    if tail or segment.strip():
+        args.append(tail)
+
     return args
+
+
+def getLineArguments(line):
+    segment = _extract_args_segment(line)
+    if not segment:
+        return []
+    return _split_args(segment)
 
 
 # -------------------------------------------------- Render Graph Codegen -----------------------------------------------------------

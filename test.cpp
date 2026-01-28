@@ -28,7 +28,7 @@
 // ============================================ PHASE 1: INITIALIZATION ============================================
 // Create initial resources: 20 buffers and 15 framebuffers with varying sizes
 ///> Graphics_Task( Init )
-///>     Create_Buffer( buf_a, 4, 0, 0 )
+///>     Create_Buffer( buf_a, (uint32_t)4, (uint32_t)0, (uint32_t)0 )
 ///>     Create_Buffer( buf_b, 8, 0, 0 )
 ///>     Create_Buffer( buf_c, 16, 0, 0 )
 ///>     Create_Buffer( buf_d, 32, 0, 0 )
@@ -43,7 +43,7 @@
 ///>     Create_Buffer( buf_m, 16, 0, 0 )
 ///>     Create_Buffer( buf_n, 32, 0, 0 )
 ///>     Create_Buffer( buf_o, 64, 0, 0 )
-///>     Create_TextureFB( fb_p, 16, 16, 0, 1, 0 )
+///>     Create_TextureFB( fb_p, (uint32_t)16, (uint32_t)16, (uint32_t)0, (uint32_t)1, 0 )
 ///>     Create_TextureFB( fb_q, 32, 32, 0, 1, 0 )
 ///>     Create_TextureFB( fb_r, 64, 64, 0, 1, 0 )
 ///>     Create_TextureFB( fb_s, 128, 128, 0, 2, 0 )
