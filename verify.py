@@ -117,8 +117,39 @@ def run_test():
     check_pattern(r"Total Transitions: \d+", "Transition count tracked")
     check_pattern(r"Total execution time: \d+ ms", "Execution time measured")
 
+    # Check hash recompile tests
+    print("\nPhase 11: Hash Recompile Tests")
+    check_pattern(r"\[HASH RECOMPILE TESTS\]", "Hash recompile test section present")
+    check_pattern(
+        r"\[HASH TEST\] Compile A \(config=0\)", "First compile with config A"
+    )
+    check_pattern(r"\[HASH\] Build #1 \(config=0\)", "Build #1 executed for config A")
+    check_pattern(
+        r"\[HASH TEST\] Compile A again \(same config\)",
+        "Second compile with same config A",
+    )
+    check_pattern(
+        r"\[HASH\] buildCount=1 \(should be 1\)", "No rebuild for same config"
+    )
+    check_pattern(
+        r"\[HASH TEST\] Compile B \(config changed to 1\)", "Compile with config B"
+    )
+    check_pattern(
+        r"\[HASH\] buildCount=2 \(should be 2\)", "Rebuild occurred for config B"
+    )
+    check_pattern(
+        r"\[HASH\] buildCount=2 \(should be 2\)", "No rebuild for same config B"
+    )
+    check_pattern(
+        r"\[HASH\] buildCount=3 \(should be 3\)", "Rebuild occurred for config C"
+    )
+    check_pattern(
+        r"\[HASH\] buildCount=4 \(should be 4\)",
+        "Rebuild occurred when returning to config A",
+    )
+
     # Check test completion
-    print("\nPhase 10: Test Completion")
+    print("\nPhase 12: Test Completion")
     check_pattern(r"\[TEST COMPLETE\]", "Test completed successfully")
 
     print(f"\n{'=' * 60}")

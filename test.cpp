@@ -459,6 +459,7 @@ public:
 
 class ComplexEngineInterfaceTest : public ExtendedEngineInterfaceTest
 {
+public:
     virtual void Build( vrdg::State* s ) override
     {
         using namespace vrdg;
@@ -514,6 +515,31 @@ class ComplexEngineInterfaceTest : public ExtendedEngineInterfaceTest
     }
 };
 
+// ============================================ HASH RECOMPILE TEST ENGINE ============================================
+
+class HashRecompileEngineTest : public ComplexEngineInterfaceTest
+{
+public:
+    int configVersion = 0;
+    int buildCount = 0;
+
+    virtual void HashGraphConfigOptions( uint64_t& hash0, uint64_t& hash1 ) override
+    {
+        // Simple hash based on config version
+        hash0 = 1315423911;
+        hash1 = 13;
+        hash0 ^= ( ( hash0 << 5 ) + configVersion + ( hash0 >> 2 ) );
+        hash1 ^= ( ( hash1 << 5 ) + configVersion + ( hash1 >> 2 ) );
+    }
+
+    virtual void Build( vrdg::State* s ) override
+    {
+        buildCount++;
+        printf( "  [HASH] Build #%d (config=%d)\n", buildCount, configVersion );
+        ComplexEngineInterfaceTest::Build( s );
+    }
+};
+
 // ============================================ MAIN TEST ============================================
 
 vrdg::State state;
@@ -545,6 +571,40 @@ int main()
 
     printf( "[RUN 4 - Execution after recompile]\n" );
     vrdg::Run( &state, &test );
+
+    // ============================================ HASH RECOMPILE TESTS ============================================
+    printf( "\n[HASH RECOMPILE TESTS]\n" );
+    
+    vrdg::State hashState;
+    HashRecompileEngineTest hashTest;
+    
+    printf( "\n[HASH TEST] Compile A (config=0)\n" );
+    hashTest.configVersion = 0;
+    vrdg::Compile( &hashState, &hashTest );
+    printf( "  [HASH] buildCount=%d, tasks=%zu\n", hashTest.buildCount, hashState.tasks.size() );
+    
+    printf( "\n[HASH TEST] Compile A again (same config)\n" );
+    vrdg::Compile( &hashState, &hashTest );
+    printf( "  [HASH] buildCount=%d (should be 1), tasks=%zu\n", hashTest.buildCount, hashState.tasks.size() );
+    
+    printf( "\n[HASH TEST] Compile B (config changed to 1)\n" );
+    hashTest.configVersion = 1;
+    vrdg::Compile( &hashState, &hashTest );
+    printf( "  [HASH] buildCount=%d (should be 2), tasks=%zu\n", hashTest.buildCount, hashState.tasks.size() );
+    
+    printf( "\n[HASH TEST] Compile B again (same config)\n" );
+    vrdg::Compile( &hashState, &hashTest );
+    printf( "  [HASH] buildCount=%d (should be 2), tasks=%zu\n", hashTest.buildCount, hashState.tasks.size() );
+    
+    printf( "\n[HASH TEST] Compile C (config changed to 2)\n" );
+    hashTest.configVersion = 2;
+    vrdg::Compile( &hashState, &hashTest );
+    printf( "  [HASH] buildCount=%d (should be 3), tasks=%zu\n", hashTest.buildCount, hashState.tasks.size() );
+    
+    printf( "\n[HASH TEST] Back to A (config changed to 0)\n" );
+    hashTest.configVersion = 0;
+    vrdg::Compile( &hashState, &hashTest );
+    printf( "  [HASH] buildCount=%d (should be 4), tasks=%zu\n", hashTest.buildCount, hashState.tasks.size() );
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);

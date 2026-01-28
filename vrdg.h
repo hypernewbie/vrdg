@@ -160,6 +160,10 @@ inline void Compile( State* state, EngineInterface* ei )
     // Call overridden build step.
     ei->Build( state );
 
+    // Store the hash so we can detect changes next time.
+    state->currentGraphHash0 = graphHash0;
+    state->currentGraphHash1 = graphHash1;
+
     // Post-build loop to determine last used resource times to release them.
 
     std::map< uint64_t, AttachmentType > attachmentType;
