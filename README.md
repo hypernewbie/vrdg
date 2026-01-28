@@ -1,5 +1,7 @@
 # Vrdg - Minimal Render Graph Generator
 
+[![CI](https://github.com/hypernewbie/vrdg/actions/workflows/ci.yml/badge.svg)](https://github.com/hypernewbie/vrdg/actions/workflows/ci.yml)
+
 Vrdg is a minimal render dependency graph Python code generator. It lets you describe render/compute tasks using `///>` annotations in a C++ source file, generates the wiring code into a header, and then runs the tasks through a minimal runtime (`vrdg.h`) that handles task ordering, resource transitions, and releases.
 
 > NOTE: VRDG contains more heavily coded testing infra. Read at your own risk. The core vrdg.py and vrdg.h parts are mostly human written.
