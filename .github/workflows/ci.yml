@@ -1,0 +1,63 @@
+name: CI - Build and Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+    
+    - name: Cache build
+      uses: actions/cache@v4
+      with:
+        path: build
+        key: ${{ runner.os }}-build-${{ hashFiles('CMakeLists.txt', 'vrdg.h', 'vrdg.py', 'test.cpp') }}
+        restore-keys: |
+          ${{ runner.os }}-build-
+    
+    - name: Configure CMake (Windows)
+      if: runner.os == 'Windows'
+      run: cmake -S . -B build
+
+    - name: Configure CMake (Unix)
+      if: runner.os != 'Windows'
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+    
+    - name: Build project (Windows)
+      if: runner.os == 'Windows'
+      run: cmake --build build --config Debug
+
+    - name: Build project (Unix)
+      if: runner.os != 'Windows'
+      run: cmake --build build
+    
+    - name: Run tests with CTest (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: ctest --test-dir build -C Debug -V
+
+    - name: Run tests with CTest (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: ctest --test-dir build -V
+    
+    - name: Run verification script
+      shell: bash
+      run: python verify.py
