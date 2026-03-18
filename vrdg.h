@@ -41,6 +41,16 @@
     #define MICROPROFILE_SCOPEGPUI(name, color) ((void)0)
 #endif
 
+#ifndef vhTimerID
+    #define vhTimerID uint64_t
+#endif
+#ifndef vhBeginTimerQuery
+    #define vhBeginTimerQuery(id) ((void)0)
+#endif
+#ifndef vhEndTimerQuery
+    #define vhEndTimerQuery(id) ((void)0)
+#endif
+
 namespace vrdg {
 
 typedef uint64_t Buffer;

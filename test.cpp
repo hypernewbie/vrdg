@@ -263,6 +263,22 @@
 ///>     Func( ReadOnly2_Func )
 ///> End_Task
 
+// ============================================ PHASE 8: GPU PROFILING ============================================
+// Test GPU_Profile annotation generates vrhi timer queries
+
+///> Graphics_Task( GpuProfile_Test )
+///>     Write_Buffer( buf_a )
+///>     GPU_Profile( GpuProfilePass )
+///>     CPU_Profile( GpuProfile_Test )
+///>     Func( GpuProfileTest_Func )
+///> End_Task
+
+///> Graphics_Task( GpuProfile_Test2 )
+///>     Read_Buffer( buf_a )
+///>     GPU_Profile( GpuProfilePass2 )
+///>     Func( GpuProfileTest2_Func )
+///> End_Task
+
 // ============================================ FUNCTION IMPLEMENTATIONS ============================================
 
 namespace vrdg {
@@ -382,6 +398,15 @@ void ReadOnly1_Func( VRDG_FRAMEBUFFER fb_y ) {
 
 void ReadOnly2_Func( VRDG_FRAMEBUFFER fb_y ) {
     printf( "    ReadOnly_2 : fb_y = %llu\n", (unsigned long long)fb_y );
+}
+
+// GPU Profile functions
+void GpuProfileTest_Func( VRDG_BUFFER buf_a ) {
+    printf( "    GpuProfile_Test : buf_a = %llu\n", (unsigned long long)buf_a );
+}
+
+void GpuProfileTest2_Func( VRDG_BUFFER buf_a ) {
+    printf( "    GpuProfile_Test2 : buf_a = %llu\n", (unsigned long long)buf_a );
 }
 
 } // namespace vrdg
@@ -512,6 +537,10 @@ public:
         // Phase 7: Read-only tasks
         ReadOnly_1( s, fb_y );
         ReadOnly_2( s, fb_y );
+
+        // Phase 8: GPU profiling tasks
+        GpuProfile_Test( s, buf_a );
+        GpuProfile_Test2( s, buf_a );
     }
 };
 

@@ -52,7 +52,7 @@ def run_test():
     print("Phase 1: Basic Structure")
     check_pattern(r"VRDG Extensive Test Suite", "Test suite header present")
     check_pattern(r"\[COMPILE 1 - Initial graph build\]", "Compile phase 1 present")
-    check_pattern(r"Tasks registered: 28", "Correct number of tasks (28)")
+    check_pattern(r"Tasks registered: 30", "Correct number of tasks (30)")
 
     # Check execution phases
     print("\nPhase 2: Execution Phases")
