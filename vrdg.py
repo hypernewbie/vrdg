@@ -164,7 +164,9 @@ def generateCurrentTask():
         )
     if len(CURTASK_GPU_PROFILE) > 0:
         timerId = generateTimerIdFromName(CURTASK_GPU_PROFILE)
-        OUTPUT_FILE_BUFFER.append("    vhBeginTimerQuery( (vhTimerID)%d );" % timerId)
+        OUTPUT_FILE_BUFFER.append(
+            "    vhBeginTimerQuery( (vhTimerID)%dULL );" % timerId
+        )
         GPU_PROFILE_ENTRIES.append((CURTASK_GPU_PROFILE, timerId))
 
     for t, name, args in CURTASK_CREATE:
@@ -211,7 +213,7 @@ def generateCurrentTask():
         OUTPUT_FILE_BUFFER.append("    %s( %s );" % (CURTASK_FUNC, ", ".join(callArgs)))
     if len(CURTASK_GPU_PROFILE) > 0:
         timerId = generateTimerIdFromName(CURTASK_GPU_PROFILE)
-        OUTPUT_FILE_BUFFER.append("    vhEndTimerQuery( (vhTimerID)%d );" % timerId)
+        OUTPUT_FILE_BUFFER.append("    vhEndTimerQuery( (vhTimerID)%dULL );" % timerId)
     OUTPUT_FILE_BUFFER.append("}\n")
 
     outputIdx = 0
@@ -335,6 +337,7 @@ for name, timerId in GPU_PROFILE_ENTRIES:
         sys.exit(1)
     seen_gpu_profile_names.add(name)
 
+OUTPUT_FILE_BUFFER.append("\n} // namespace vrdg\n")
 OUTPUT_FILE_BUFFER.append("\n")
 OUTPUT_FILE_BUFFER.append("struct aeGpuProfilePassInfo\n")
 OUTPUT_FILE_BUFFER.append("{\n")
@@ -345,18 +348,18 @@ OUTPUT_FILE_BUFFER.append("\n")
 
 if len(GPU_PROFILE_ENTRIES) > 0:
     OUTPUT_FILE_BUFFER.append(
-        "static const aeGpuProfilePassInfo s_gpuProfilePasses[%d] = {\n"
+        "static const aeGpuProfilePassInfo s_rgraphGpuProfilePasses[%d] = {\n"
         % len(GPU_PROFILE_ENTRIES)
     )
     for name, timerId in GPU_PROFILE_ENTRIES:
-        OUTPUT_FILE_BUFFER.append('    { "%s", (vhTimerID)%d },\n' % (name, timerId))
+        OUTPUT_FILE_BUFFER.append('    { "%s", (vhTimerID)%dULL },\n' % (name, timerId))
     OUTPUT_FILE_BUFFER.append("};\n")
     OUTPUT_FILE_BUFFER.append("\n")
     OUTPUT_FILE_BUFFER.append(
         "const aeGpuProfilePassInfo* aeRenderGraph_GetGpuProfilePasses()\n"
     )
     OUTPUT_FILE_BUFFER.append("{\n")
-    OUTPUT_FILE_BUFFER.append("    return s_gpuProfilePasses;\n")
+    OUTPUT_FILE_BUFFER.append("    return s_rgraphGpuProfilePasses;\n")
     OUTPUT_FILE_BUFFER.append("}\n")
     OUTPUT_FILE_BUFFER.append("\n")
     OUTPUT_FILE_BUFFER.append("size_t aeRenderGraph_GetGpuProfilePassCount()\n")
@@ -364,6 +367,6 @@ if len(GPU_PROFILE_ENTRIES) > 0:
     OUTPUT_FILE_BUFFER.append("    return %d;\n" % len(GPU_PROFILE_ENTRIES))
     OUTPUT_FILE_BUFFER.append("}\n")
 
-OUTPUT_FILE_BUFFER.append("\n} // namespace vrdg\n")
+
 for line in OUTPUT_FILE_BUFFER:
     print(line)
