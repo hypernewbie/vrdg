@@ -41,10 +41,11 @@
     #define MICROPROFILE_SCOPEGPUI(name, color) ((void)0)
 #endif
 
-#ifndef VRHI_H
-    typedef uint64_t vhTimerID;
-    inline void vhBeginTimerQuery(vhTimerID id) {}
-    inline void vhEndTimerQuery(vhTimerID id) {}
+#ifndef VRDG_GPU_PROFILE_BEGIN
+    #define VRDG_GPU_PROFILE_BEGIN(id) ((void)0)
+#endif
+#ifndef VRDG_GPU_PROFILE_END
+    #define VRDG_GPU_PROFILE_END(id) ((void)0)
 #endif
 
 namespace vrdg {
