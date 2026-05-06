@@ -46,6 +46,40 @@ def run_test():
             success = False
             return False
 
+    # Helper for checking a pattern *inside* a specific [HASH TEST] section, so
+    # a stale line from an earlier step can't satisfy a later step's check.
+    def check_hash_section(section_header_pattern, sub_pattern, description):
+        nonlocal checks_passed, checks_total, success
+        checks_total += 1
+        m = re.search(section_header_pattern, output)
+        if not m:
+            print(f"  [FAIL] {description} (section header not found)")
+            success = False
+            return False
+        rest = output[m.end():]
+        next_section = re.search(r"\[HASH TEST\]|\[HASH STATISTICS\]|\[STATISTICS\]", rest)
+        section_text = rest if not next_section else rest[: next_section.start()]
+        if re.search(sub_pattern, section_text):
+            print(f"  [PASS] {description}")
+            checks_passed += 1
+            return True
+        else:
+            print(f"  [FAIL] {description}")
+            success = False
+            return False
+
+    def check_header_pattern(header_text, pattern, description):
+        nonlocal checks_passed, checks_total, success
+        checks_total += 1
+        if re.search(pattern, header_text):
+            print(f"  [PASS] {description}")
+            checks_passed += 1
+            return True
+        else:
+            print(f"  [FAIL] {description}")
+            success = False
+            return False
+
     print("Verifying extensive VRDG test output...\n")
 
     # Check basic structure
@@ -112,45 +146,132 @@ def run_test():
 
     # Check statistics
     print("\nPhase 9: Statistics")
-    check_pattern(r"Total Creations: 100", "100 total creations (25 per run x 4 runs)")
-    check_pattern(r"Total Releases: 100", "100 total releases (matching creations)")
-    check_pattern(r"Total Transitions: \d+", "Transition count tracked")
+    check_pattern(r"\[STATISTICS\][\s\S]*?Total Creations: 100", "100 total creations (25 per run x 4 runs)")
+    check_pattern(r"\[STATISTICS\][\s\S]*?Total Releases: 100", "100 total releases (matching creations)")
+    check_pattern(r"\[STATISTICS\][\s\S]*?Total Transitions: 324", "Total transitions pinned to 324")
     check_pattern(r"Total execution time: \d+ ms", "Execution time measured")
 
-    # Check hash recompile tests
+    # Check hash recompile tests. Each buildCount check is anchored to the
+    # specific [HASH TEST] section it belongs to, so a stale line from an
+    # earlier step can't satisfy a later step's pass condition.
     print("\nPhase 11: Hash Recompile Tests")
     check_pattern(r"\[HASH RECOMPILE TESTS\]", "Hash recompile test section present")
-    check_pattern(
-        r"\[HASH TEST\] Compile A \(config=0\)", "First compile with config A"
+    check_hash_section(
+        r"\[HASH TEST\] Compile A \(config=0\)",
+        r"\[HASH\] Build #1 \(config=0\)",
+        "First compile with config A triggers Build #1",
     )
-    check_pattern(r"\[HASH\] Build #1 \(config=0\)", "Build #1 executed for config A")
-    check_pattern(
+    check_hash_section(
+        r"\[HASH TEST\] Compile A \(config=0\)",
+        r"\[HASH\] buildCount=1, tasks=30",
+        "After config A, buildCount=1 / tasks=30",
+    )
+    check_hash_section(
         r"\[HASH TEST\] Compile A again \(same config\)",
-        "Second compile with same config A",
+        r"\[HASH\] buildCount=1 \(should be 1\), tasks=30",
+        "Re-compile A: no rebuild (buildCount stays at 1)",
+    )
+    check_hash_section(
+        r"\[HASH TEST\] Compile B \(config changed to 1\)",
+        r"\[HASH\] Build #2 \(config=1\)",
+        "Config B triggers Build #2",
+    )
+    check_hash_section(
+        r"\[HASH TEST\] Compile B \(config changed to 1\)",
+        r"\[HASH\] buildCount=2 \(should be 2\), tasks=30",
+        "After config B, buildCount=2 / tasks=30",
+    )
+    check_hash_section(
+        r"\[HASH TEST\] Compile B again \(same config\)",
+        r"\[HASH\] buildCount=2 \(should be 2\), tasks=30",
+        "Re-compile B: no rebuild (buildCount stays at 2)",
+    )
+    check_hash_section(
+        r"\[HASH TEST\] Compile C \(config changed to 2\)",
+        r"\[HASH\] Build #3 \(config=2\)",
+        "Config C triggers Build #3",
+    )
+    check_hash_section(
+        r"\[HASH TEST\] Compile C \(config changed to 2\)",
+        r"\[HASH\] buildCount=3 \(should be 3\), tasks=30",
+        "After config C, buildCount=3 / tasks=30",
+    )
+    check_hash_section(
+        r"\[HASH TEST\] Back to A \(config changed to 0\)",
+        r"\[HASH\] Build #4 \(config=0\)",
+        "Returning to A triggers Build #4 (different from current hash)",
+    )
+    check_hash_section(
+        r"\[HASH TEST\] Back to A \(config changed to 0\)",
+        r"\[HASH\] buildCount=4 \(should be 4\), tasks=30",
+        "After return to A, buildCount=4 / tasks=30",
+    )
+
+    # Run after final rebuild — verifies state was reset cleanly between rebuilds.
+    print("\nPhase 11b: Run after final rebuild")
+    check_pattern(
+        r"\[HASH TEST\] Run on hashState after final rebuild",
+        "Run-after-rebuild section present",
     )
     check_pattern(
-        r"\[HASH\] buildCount=1 \(should be 1\)", "No rebuild for same config"
+        r"\[HASH STATISTICS\][\s\S]*?Total Creations: 25",
+        "Run after rebuild: 25 creations (single run on cleanly-rebuilt graph)",
     )
     check_pattern(
-        r"\[HASH TEST\] Compile B \(config changed to 1\)", "Compile with config B"
-    )
-    check_pattern(
-        r"\[HASH\] buildCount=2 \(should be 2\)", "Rebuild occurred for config B"
-    )
-    check_pattern(
-        r"\[HASH\] buildCount=2 \(should be 2\)", "No rebuild for same config B"
-    )
-    check_pattern(
-        r"\[HASH\] buildCount=3 \(should be 3\)", "Rebuild occurred for config C"
-    )
-    check_pattern(
-        r"\[HASH\] buildCount=4 \(should be 4\)",
-        "Rebuild occurred when returning to config A",
+        r"\[HASH STATISTICS\][\s\S]*?Total Releases: 25",
+        "Run after rebuild: 25 releases (matching creations)",
     )
 
     # Check test completion
     print("\nPhase 12: Test Completion")
     check_pattern(r"\[TEST COMPLETE\]", "Test completed successfully")
+
+    # Check GPU_Profile codegen by reading the generated header directly.
+    print("\nPhase 13: GPU Profile Codegen (test.h)")
+    header_path = "test.h"
+    if not os.path.exists(header_path):
+        print(f"  [FAIL] {header_path} not found — cannot verify GPU profile codegen")
+        success = False
+    else:
+        with open(header_path, "r", encoding="utf-8", errors="ignore") as fh:
+            header = fh.read()
+        check_header_pattern(header, r"VRDG_GPU_PROFILE_BEGIN\(", "VRDG_GPU_PROFILE_BEGIN emitted")
+        check_header_pattern(header, r"VRDG_GPU_PROFILE_END\(", "VRDG_GPU_PROFILE_END emitted")
+        check_header_pattern(
+            header,
+            r"s_rgraphGpuProfilePasses\[2\]",
+            "GPU profile table sized for 2 entries",
+        )
+        check_header_pattern(
+            header,
+            r'\{\s*"GpuProfilePass",\s*\d+ULL\s*\}',
+            "GpuProfilePass entry present in table",
+        )
+        check_header_pattern(
+            header,
+            r'\{\s*"GpuProfilePass2",\s*\d+ULL\s*\}',
+            "GpuProfilePass2 entry present in table",
+        )
+        check_header_pattern(
+            header,
+            r"aeRenderGraph_GetGpuProfilePasses\s*\(\s*\)",
+            "aeRenderGraph_GetGpuProfilePasses() defined",
+        )
+        check_header_pattern(
+            header,
+            r"aeRenderGraph_GetGpuProfilePassCount\s*\(\s*\)[\s\S]*?return 2;",
+            "aeRenderGraph_GetGpuProfilePassCount() returns 2",
+        )
+        # Same name must produce same timer ID across the BEGIN call site and the table.
+        begin_ids = re.findall(r"VRDG_GPU_PROFILE_BEGIN\(\s*(\d+)ULL", header)
+        table_ids = dict(re.findall(r'\{\s*"([^"]+)",\s*(\d+)ULL\s*\}', header))
+        checks_total += 1
+        if begin_ids and len(begin_ids) >= 2 and begin_ids[0] == table_ids.get("GpuProfilePass") and begin_ids[1] == table_ids.get("GpuProfilePass2"):
+            print("  [PASS] Timer IDs at call-site match table entries (deterministic hashing)")
+            checks_passed += 1
+        else:
+            print(f"  [FAIL] Timer ID mismatch: begin={begin_ids}, table={table_ids}")
+            success = False
 
     print(f"\n{'=' * 60}")
     print(f"Verification Results: {checks_passed}/{checks_total} checks passed")

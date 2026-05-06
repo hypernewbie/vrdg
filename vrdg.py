@@ -19,7 +19,7 @@
 #    OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 #    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import os, sys, re, glob, hashlib
+import os, sys, glob, hashlib
 
 # ------------------------------------------------ Config & Globals -------------------------------------------------------------
 
@@ -31,6 +31,7 @@ CURTASK_CREATE = []
 CURTASK_CPU_PROFILE = ""
 CURTASK_GPU_PROFILE = ""
 CURTASK_FUNC = ""
+CURTASK_OPEN = False
 
 GPU_PROFILE_ENTRIES = []
 
@@ -114,6 +115,12 @@ def getLineArguments(line):
     if not segment:
         return []
     return _split_args(segment)
+
+
+def _abort(fileName, lineIndex, msg):
+    where = "%s line %d" % (os.path.basename(fileName), lineIndex) if lineIndex >= 0 else os.path.basename(fileName)
+    print("ERROR: %s: %s" % (where, msg))
+    sys.exit(1)
 
 
 def generateTimerIdFromName(name):
@@ -263,10 +270,9 @@ def parseSourceFile(fileName):
     global CURTASK_CPU_PROFILE
     global CURTASK_GPU_PROFILE
     global CURTASK_FUNC
+    global CURTASK_OPEN
 
     fp = open(fileName, "r", encoding="utf-8", errors="ignore")
-    if not fp:
-        print("Failed to open %s" % os.path.basename(fileName))
 
     lineIndex = -1
     for line in fp:
@@ -281,6 +287,8 @@ def parseSourceFile(fileName):
             continue
 
         if line.startswith("Graphics_Task") or line.startswith("Compute_Task"):
+            if CURTASK_OPEN: _abort(fileName, lineIndex, "'%s' opens before previous task '%s' was closed with End_Task." % (line, CURTASK_NAME))
+            if len(lineArgs) == 0 or len(lineArgs[0]) == 0: _abort(fileName, lineIndex, "task header missing name: %s" % line)
             CURTASK_NAME = lineArgs[0]
             CURTASK_SOURCE = (
                 "Generated from definition in %s line %d. DO NOT EDIT HERE!"
@@ -291,12 +299,15 @@ def parseSourceFile(fileName):
             CURTASK_CPU_PROFILE = ""
             CURTASK_GPU_PROFILE = ""
             CURTASK_FUNC = ""
+            CURTASK_OPEN = True
             if line.startswith("Graphics_Task"):
                 CURTASK_TYPE = "graphics"
             else:
                 CURTASK_TYPE = "compute"
         elif line.startswith("End_Task"):
+            if not CURTASK_OPEN: _abort(fileName, lineIndex, "End_Task without matching Graphics_Task/Compute_Task.")
             generateCurrentTask()
+            CURTASK_OPEN = False
         elif line.startswith("Write_Buffer"):
             CURTASK_IO.append(("Write_Buffer", lineArgs[0], []))
         elif line.startswith("Read_Buffer"):
@@ -318,6 +329,8 @@ def parseSourceFile(fileName):
         else:
             print("Failed understand: %s" % line)
             continue
+
+    if CURTASK_OPEN: _abort(fileName, -1, "task '%s' missing End_Task at end of file." % CURTASK_NAME)
 
 
 # -------------------------------------------------- Main Script -----------------------------------------------------------

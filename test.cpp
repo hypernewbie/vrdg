@@ -471,9 +471,9 @@ public:
         printf( "  [TRANSITION] FrameBuffer (id=%llu) %s %s\n", (unsigned long long)idx, flagStr, graphicsStr );
     }
 
-    void PrintStats()
+    void PrintStats( const char* label = "STATISTICS" )
     {
-        printf( "\n[STATISTICS]\n" );
+        printf( "\n[%s]\n", label );
         printf( "  Total Creations: %d\n", creationCount );
         printf( "  Total Releases: %d\n", releaseCount );
         printf( "  Total Transitions: %d\n", transitionCount );
@@ -634,6 +634,10 @@ int main()
     hashTest.configVersion = 0;
     vrdg::Compile( &hashState, &hashTest );
     printf( "  [HASH] buildCount=%d (should be 4), tasks=%zu\n", hashTest.buildCount, hashState.tasks.size() );
+
+    printf( "\n[HASH TEST] Run on hashState after final rebuild\n" );
+    vrdg::Run( &hashState, &hashTest );
+    static_cast<ExtendedEngineInterfaceTest&>(hashTest).PrintStats( "HASH STATISTICS" );
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
