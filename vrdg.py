@@ -291,8 +291,8 @@ def parseSourceFile(fileName):
             if len(lineArgs) == 0 or len(lineArgs[0]) == 0: _abort(fileName, lineIndex, "task header missing name: %s" % line)
             CURTASK_NAME = lineArgs[0]
             CURTASK_SOURCE = (
-                "Generated from definition in %s line %d. DO NOT EDIT HERE!"
-                % (os.path.basename(fileName), lineIndex)
+                "Generated from definition in %s. DO NOT EDIT HERE!"
+                % os.path.basename(fileName)
             )
             CURTASK_IO = []
             CURTASK_CREATE = []
