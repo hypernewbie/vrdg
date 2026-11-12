@@ -287,6 +287,7 @@ void TestGeneratedGraph()
     test.later.fb = vrdg::FBDesc( 64, 48, 7, 3, 1ULL << 45 );
     vrdg::State state;
     vrdg::Compile( &state, &test );
+    Check( std::strstr( state.tasks[0].source, "test_edge_cases.cpp:" ) != nullptr, "generated task retains source location" );
     RunMixed( state, test );
 
     // Change every descriptor field and all native pointers, without rebuilding.
@@ -303,7 +304,7 @@ void TestGeneratedGraph()
     test.failResolve = true;
     bool threw = false;
     try { vrdg::Run( &state, &test ); }
-    catch ( const std::runtime_error& ) { threw = true; }
+    catch ( const std::runtime_error& error ) { threw = true; Check( std::strcmp( error.what(), "mock descriptor failure" ) == 0, "descriptor exception reaches host unchanged" ); }
     Check( threw && !test.prepared && test.events.empty() && test.resolves > 8, "descriptor failure prevents preparation and passes" );
     RunMixed( state, test );
 
@@ -321,7 +322,7 @@ void TestGeneratedGraph()
     test.failBuild = true;
     threw = false;
     try { vrdg::Compile( &state, &test ); }
-    catch ( const std::runtime_error& ) { threw = true; }
+    catch ( const std::runtime_error& error ) { threw = true; Check( std::strcmp( error.what(), "mock build failure" ) == 0, "build exception reaches host unchanged" ); }
     Check( threw && !state.compiled, "partially built graph is not executable" );
     test.ResetRun();
     threw = false;
@@ -354,6 +355,7 @@ public:
         if ( empty )
             return;
         vrdg::Resource resource;
+        resource.name = "scratch";
         resource.lifetime = lifetime;
         resource.declarationTask = 0;
         resource.resolveDescriptor = []( vrdg::State*, vrdg::EngineInterface* ei, vrdg::Task*, vrdg::Resource* r ) {
@@ -362,6 +364,8 @@ public:
         };
         state->resources.push_back( resource );
         vrdg::Task task;
+        task.name = "Access";
+        task.source = "validation.cpp:17";
         task.flags = vrdg::VRDG_COMPUTE;
         task.uses = accesses;
         task.callback = [this]( vrdg::State*, vrdg::EngineInterface*, vrdg::Task* ) { callbacks++; };
@@ -395,7 +399,12 @@ void TestAccessValidation()
         State state;
         bool threw = false;
         try { Compile( &state, &test ); }
-        catch ( const std::logic_error& ) { threw = true; }
+        catch ( const std::logic_error& error ) {
+            threw = true;
+            std::string text = error.what();
+            Check( text.find( "validation.cpp:17: task 0 \"Access\", resource " ) != std::string::npos, "runtime diagnostic includes source and task" );
+            Check( text.find( accesses[0].id == 1 ? "resource 1:" : "resource 0 \"scratch\":" ) != std::string::npos, "runtime diagnostic identifies declared or missing resource" );
+        }
         Check( threw && !state.compiled, "invalid access graph rejected" );
         threw = false;
         try { Run( &state, &test ); }

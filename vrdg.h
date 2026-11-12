@@ -130,6 +130,7 @@ struct Resource
 struct Task
 {
     std::string name;
+    const char* source = "";
     uint32_t flags = 0;
 
     std::vector< ResourceUse > uses;
@@ -145,6 +146,21 @@ struct State
     std::vector< Resource > resources;
     bool compiled = false;
 };
+
+inline std::logic_error ResourceError( const State* state, int taskIndex, uint64_t id, const std::string& message )
+{
+    std::string text = "VRDG: ";
+    if ( taskIndex >= 0 && taskIndex < ( int ) state->tasks.size() ) {
+        const auto& task = state->tasks[taskIndex];
+        if ( task.source[0] )
+            text += std::string( task.source ) + ": ";
+        text += "task " + std::to_string( taskIndex ) + " \"" + task.name + "\", ";
+    }
+    text += "resource " + std::to_string( id );
+    if ( id < state->resources.size() )
+        text += " \"" + state->resources[id].name + "\"";
+    return std::logic_error( text + ": " + message );
+}
 
 class EngineInterface
 {
@@ -238,7 +254,7 @@ inline void Compile( State* state, EngineInterface* ei )
         for( int j = 0; j < ( int ) task.uses.size(); j++ ) {
             auto& use = task.uses[j];
             if ( use.id >= state->resources.size() || state->resources[use.id].type != use.type )
-                throw std::logic_error( "VRDG: access requires a matching resource declaration" );
+                throw ResourceError( state, i, use.id, "access requires a matching resource declaration" );
 
             // Keep callback argument slots. Repeated IDs transition through their first slot.
             for( int k = 0; k < j; k++ ) {
@@ -246,11 +262,11 @@ inline void Compile( State* state, EngineInterface* ei )
                 if ( previous.id != use.id || !previous.flags )
                     continue;
                 if ( ( previous.flags & VRDG_WRITE ) && ( use.flags & VRDG_WRITE ) && ( ( previous.flags ^ use.flags ) & VRDG_DISCARD ) )
-                    throw std::logic_error( "VRDG: conflicting discard and preserving writes" );
+                    throw ResourceError( state, i, use.id, "conflicting discard and preserving writes" );
                 previous.flags |= use.flags;
                 use.flags = 0;
                 if ( ( previous.flags & VRDG_DISCARD ) && ( previous.flags & VRDG_READ ) )
-                    throw std::logic_error( "VRDG: discard access cannot read existing contents" );
+                    throw ResourceError( state, i, use.id, "discard access cannot read existing contents" );
                 break;
             }
             auto& resource = state->resources[use.id];
