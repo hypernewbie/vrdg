@@ -9,7 +9,9 @@ import re
 def run_test():
     """Run vrdg_test.exe and verify its output."""
     # Determine executable path
-    if os.name == "nt":  # Windows
+    if len(sys.argv) > 1:
+        exe_path = sys.argv[1]
+    elif os.name == "nt":  # Windows
         exe_path = os.path.join("build", "Debug", "vrdg_test.exe")
     else:
         exe_path = os.path.join("build", "vrdg_test")
@@ -148,7 +150,7 @@ def run_test():
     print("\nPhase 9: Statistics")
     check_pattern(r"\[STATISTICS\][\s\S]*?Total Creations: 100", "100 total creations (25 per run x 4 runs)")
     check_pattern(r"\[STATISTICS\][\s\S]*?Total Releases: 100", "100 total releases (matching creations)")
-    check_pattern(r"\[STATISTICS\][\s\S]*?Total Transitions: 324", "Total transitions pinned to 324")
+    check_pattern(r"\[STATISTICS\][\s\S]*?Total Transitions: 224", "224 transitions for actual accesses (declarations excluded)")
     check_pattern(r"Total execution time: \d+ ms", "Execution time measured")
 
     # Check hash recompile tests. Each buildCount check is anchored to the

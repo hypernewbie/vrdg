@@ -23,9 +23,9 @@
 
 #include <string>
 #include <vector>
-#include <map>
 #include <functional>
 #include <cstdint>
+#include <stdexcept>
 
 #ifndef VRDG_BUFFER
     #define VRDG_BUFFER uint64_t
@@ -62,7 +62,8 @@ enum TransitionFlagBits
     VRDG_READ = 0x1,
     VRDG_WRITE = 0x2,
     VRDG_GRAPHICS = 0x4,
-    VRDG_COMPUTE = 0x8
+    VRDG_COMPUTE = 0x8,
+    VRDG_DISCARD = 0x10
 };
 
 enum AttachmentType
@@ -71,28 +72,78 @@ enum AttachmentType
     VRDG_TYPE_FB
 };
 
+enum ResourceLifetime
+{
+    VRDG_TRANSIENT,
+    VRDG_PERSISTENT,
+    VRDG_IMPORTED
+};
+
+struct BufferDesc
+{
+    uint64_t size;
+    uint32_t format, flags;
+
+    BufferDesc( uint64_t sz = 0, uint32_t fmt = 0, uint32_t f = 0 ) : size( sz ), format( fmt ), flags( f ) {}
+
+    bool operator==( const BufferDesc& other ) const
+    {
+        return size == other.size && format == other.format && flags == other.flags;
+    }
+};
+
+struct FBDesc
+{
+    uint32_t width, height, format, mips;
+    uint64_t flags;
+
+    FBDesc( uint32_t w = 0, uint32_t h = 0, uint32_t fmt = 0, uint32_t m = 1, uint64_t f = 0 )
+        : width( w ), height( h ), format( fmt ), mips( m ), flags( f ) {}
+
+    bool operator==( const FBDesc& other ) const
+    {
+        return width == other.width && height == other.height && format == other.format && mips == other.mips && flags == other.flags;
+    }
+};
+
+struct ResourceUse
+{
+    uint64_t id;
+    AttachmentType type;
+    uint64_t flags;
+};
+
+struct Resource
+{
+    uint64_t id = 0;
+    std::string name;
+    AttachmentType type = VRDG_TYPE_BUFFER;
+    ResourceLifetime lifetime = VRDG_TRANSIENT;
+    int declarationTask = -1;
+    int firstUse = -1, lastUse = -1;
+    BufferDesc buffer;
+    FBDesc fb;
+
+    std::function< void( State*, EngineInterface*, Task*, Resource* ) > resolveDescriptor = nullptr;
+};
+
 struct Task
 {
     std::string name;
     uint32_t flags = 0;
 
-    int createOutputIdx = 0;
-    std::vector< uint64_t > input;
-    std::vector< uint64_t > output;
-    std::vector< uint64_t > releases;
-    std::vector< AttachmentType > inputType;
-    std::vector< AttachmentType > outputType;
-    std::vector< AttachmentType > releaseType;
+    std::vector< ResourceUse > uses;
 
     std::function< void( State*, EngineInterface*, Task* ) > callback = nullptr;
 };
 
 struct State
 {
-    uint64_t currentBuildPlaceholderID = 0;
     uint64_t currentGraphHash0 = 0;
     uint64_t currentGraphHash1 = 0;
     std::vector< Task > tasks;
+    std::vector< Resource > resources;
+    bool compiled = false;
 };
 
 class EngineInterface
@@ -136,6 +187,24 @@ public:
     {
     }
 
+    // All descriptors are current. Override to plan allocations and ensure/bind persistent and imported objects.
+    virtual void PrepareResources( State* state )
+    {
+        for( auto& resource : state->resources ) {
+            if ( resource.firstUse < 0 || resource.lifetime != VRDG_TRANSIENT )
+                continue;
+            if ( resource.type == VRDG_TYPE_BUFFER )
+                CreateBuffer( resource.id, resource.name, resource.buffer.size, resource.buffer.format, resource.buffer.flags );
+            else
+                CreateFB( resource.id, resource.name, resource.fb.width, resource.fb.height, resource.fb.format, resource.fb.mips, resource.fb.flags );
+        }
+    }
+
+    // Before first transition each execution. The engine tracks physical alias occupants.
+    virtual void ActivateResource( State* state, const Resource& resource, uint64_t flags )
+    {
+    }
+
     virtual void HashGraphConfigOptions( uint64_t& hash0, uint64_t& hash1 )
     {
         // JS Hash Function src: https://www.partow.net/programming/hashfunctions/index.html#RSHashFunction
@@ -154,79 +223,83 @@ public:
 
 inline void Compile( State* state, EngineInterface* ei )
 {
-    // If we're already at latest, don't both rebuilding.
     uint64_t graphHash0 = 0, graphHash1 = 0;
     ei->HashGraphConfigOptions( graphHash0, graphHash1 );
-    if ( graphHash0 == state->currentGraphHash0 && graphHash1 == state->currentGraphHash1 )
+    if ( state->compiled && graphHash0 == state->currentGraphHash0 && graphHash1 == state->currentGraphHash1 )
         return;
 
-    // Clear build task list.
-    state->currentBuildPlaceholderID = 0;
+    state->compiled = false;
     state->tasks.clear();
-
-    // Call overridden build step.
+    state->resources.clear();
     ei->Build( state );
 
-    // Store the hash so we can detect changes next time.
+    for( int i = 0; i < ( int ) state->tasks.size(); i++ ) {
+        auto& task = state->tasks[i];
+        for( int j = 0; j < ( int ) task.uses.size(); j++ ) {
+            auto& use = task.uses[j];
+            if ( use.id >= state->resources.size() || state->resources[use.id].type != use.type )
+                throw std::logic_error( "VRDG: access requires a matching resource declaration" );
+
+            // Keep callback argument slots. Repeated IDs transition through their first slot.
+            for( int k = 0; k < j; k++ ) {
+                auto& previous = task.uses[k];
+                if ( previous.id != use.id || !previous.flags )
+                    continue;
+                if ( ( previous.flags & VRDG_WRITE ) && ( use.flags & VRDG_WRITE ) && ( ( previous.flags ^ use.flags ) & VRDG_DISCARD ) )
+                    throw std::logic_error( "VRDG: conflicting discard and preserving writes" );
+                previous.flags |= use.flags;
+                use.flags = 0;
+                if ( ( previous.flags & VRDG_DISCARD ) && ( previous.flags & VRDG_READ ) )
+                    throw std::logic_error( "VRDG: discard access cannot read existing contents" );
+                break;
+            }
+            auto& resource = state->resources[use.id];
+            if ( resource.firstUse < 0 )
+                resource.firstUse = i;
+            resource.lastUse = i;
+        }
+    }
+
     state->currentGraphHash0 = graphHash0;
     state->currentGraphHash1 = graphHash1;
-
-    // Post-build loop to determine last used resource times to release them.
-
-    std::map< uint64_t, AttachmentType > attachmentType;
-    std::map< uint64_t, int > lastUsedTask;
-
-    for( int i = 0; i < state->tasks.size(); i++ ) {
-        auto& task = state->tasks[i];
-        for ( int j = 0; j < ( int ) task.input.size(); j++ ) {
-            attachmentType[task.input[j]] = task.inputType[j];
-            lastUsedTask[task.input[j]] = i;
-        }
-        for ( int j = 0; j < ( int ) task.output.size(); j++ ) {
-            attachmentType[task.output[j]] = task.outputType[j];
-            lastUsedTask[task.output[j]] = i;
-        }
-    }
-
-    for ( auto& it : attachmentType )
-    {
-        int lastUsed = lastUsedTask[it.first];
-        auto& task = state->tasks[lastUsed];
-        task.releases.push_back( it.first );
-        task.releaseType.push_back( it.second );
-    }
+    state->compiled = true;
 }
 
 inline void Run( State* state, EngineInterface* ei )
 {
-    for( auto& task : state->tasks ) {
+    if ( !state->compiled )
+        throw std::logic_error( "VRDG: Compile required before execution" );
+    for( auto& resource : state->resources )
+        resource.resolveDescriptor( state, ei, &state->tasks[resource.declarationTask], &resource );
+    ei->PrepareResources( state );
 
-        // Transition all inputs and outputs.
-
-        for ( int i = 0; i < ( int ) task.input.size(); i++ ) {
-            if ( task.inputType[i] == VRDG_TYPE_BUFFER )
-                ei->TransitionBuffer( task.input[i], task.flags | VRDG_READ );
-            else if ( task.inputType[i] == VRDG_TYPE_FB )
-                ei->TransitionFB( task.input[i], task.flags | VRDG_READ );
+    for( int i = 0; i < ( int ) state->tasks.size(); i++ ) {
+        auto& task = state->tasks[i];
+        // Activate all new occupants before any transitions for this task.
+        for( auto& use : task.uses ) {
+            auto& resource = state->resources[use.id];
+            if ( use.flags && resource.firstUse == i )
+                ei->ActivateResource( state, resource, task.flags | use.flags );
         }
-
-        for ( int i = 0; i < ( int ) task.output.size(); i++ ) {
-            if ( task.outputType[i] == VRDG_TYPE_BUFFER )
-                ei->TransitionBuffer( task.output[i], task.flags | VRDG_WRITE );
-            else if ( task.outputType[i] == VRDG_TYPE_FB )
-                ei->TransitionFB( task.output[i], task.flags | VRDG_WRITE );
+        for( auto& use : task.uses ) {
+            if ( !use.flags )
+                continue;
+            if ( use.type == VRDG_TYPE_BUFFER )
+                ei->TransitionBuffer( use.id, task.flags | use.flags );
+            else
+                ei->TransitionFB( use.id, task.flags | use.flags );
         }
-        
-        // printf("Running task %d: %s\n", i, task.name.c_str());
         task.callback( state, ei, &task );
-
-        for ( int i = 0; i < ( int ) task.releases.size(); i++ ) {
-            if ( task.releaseType[i] == VRDG_TYPE_BUFFER )
-                ei->ReleaseBuffer( task.releases[i] );
-            else if ( task.releaseType[i] == VRDG_TYPE_FB )
-                ei->ReleaseFB( task.releases[i] );
+        for( auto& use : task.uses ) {
+            auto& resource = state->resources[use.id];
+            if ( !use.flags || resource.lastUse != i || resource.lifetime != VRDG_TRANSIENT )
+                continue;
+            if ( use.type == VRDG_TYPE_BUFFER )
+                ei->ReleaseBuffer( use.id );
+            else
+                ei->ReleaseFB( use.id );
         }
     }
 }
 
-} // namespace vrdg 
+} // namespace vrdg

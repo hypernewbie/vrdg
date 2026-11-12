@@ -28,6 +28,7 @@ CURTASK_NAME = ""
 CURTASK_TYPE = "graphics"
 CURTASK_IO = []
 CURTASK_CREATE = []
+CURTASK_LIFETIME = {}
 CURTASK_CPU_PROFILE = ""
 CURTASK_GPU_PROFILE = ""
 CURTASK_FUNC = ""
@@ -64,6 +65,12 @@ IOTYPE_TO_ATTACH["Write_TextureFB"] = "VRDG_TYPE_FB"
 IOTYPE_TO_ATTACH["Read_TextureFB"] = "VRDG_TYPE_FB"
 IOTYPE_TO_ATTACH["Create_Buffer"] = "VRDG_TYPE_BUFFER"
 IOTYPE_TO_ATTACH["Create_TextureFB"] = "VRDG_TYPE_FB"
+
+for suffix in ("Buffer", "TextureFB"):
+    t = "ReadWrite_" + suffix
+    IOTYPE_TO_FUNCTIONARG[t] = IOTYPE_TO_FUNCTIONARG["Read_" + suffix]
+    IOTYPE_TO_ENGINE_FUNCTIONARG[t] = IOTYPE_TO_ENGINE_FUNCTIONARG["Read_" + suffix]
+    IOTYPE_TO_ATTACH[t] = IOTYPE_TO_ATTACH["Read_" + suffix]
 
 # ---------------------------------------------------- Helper functions ----------------------------------------------------------
 
@@ -138,6 +145,14 @@ def getSeparator(args):
     return ""
 
 
+def getAccessFlags(t, args):
+    if t.startswith("ReadWrite_"):
+        return "VRDG_READ | VRDG_WRITE"
+    if t.startswith("Read_"):
+        return "VRDG_READ"
+    return "VRDG_WRITE | VRDG_DISCARD" if args else "VRDG_WRITE"
+
+
 def generateCurrentTask():
     callArgs = []
     inputArgs = []
@@ -159,106 +174,59 @@ def generateCurrentTask():
     OUTPUT_FILE_BUFFER.append("// %s" % CURTASK_SOURCE)
     OUTPUT_FILE_BUFFER.append(
         "void %s_CallbackBody( State* state, EngineInterface* ei, Task* task )"
-        % (CURTASK_NAME)
+        % CURTASK_NAME
     )
     OUTPUT_FILE_BUFFER.append("{")
-    outputIdx = 0
-
     if len(CURTASK_CPU_PROFILE) > 0:
         OUTPUT_FILE_BUFFER.append(
-            '    MICROPROFILE_SCOPEI( "vrdg", "%s", 0xFFFFFFFF );'
-            % (CURTASK_CPU_PROFILE)
+            '    MICROPROFILE_SCOPEI( "vrdg", "%s", 0xFFFFFFFF );' % CURTASK_CPU_PROFILE
         )
     if len(CURTASK_GPU_PROFILE) > 0:
         timerId = generateTimerIdFromName(CURTASK_GPU_PROFILE)
         OUTPUT_FILE_BUFFER.append("    VRDG_GPU_PROFILE_BEGIN( %dULL );" % timerId)
         GPU_PROFILE_ENTRIES.append((CURTASK_GPU_PROFILE, timerId))
 
-    for t, name, args in CURTASK_CREATE:
-        if t.startswith("Create_Buffer"):
-            OUTPUT_FILE_BUFFER.append(
-                '    ei->CreateBuffer( task->output[task->createOutputIdx + %d], "%s"%s%s );'
-                % (outputIdx, name, getSeparator(args), ", ".join(args))
-            )
-        if t.startswith("Create_TextureFB"):
-            OUTPUT_FILE_BUFFER.append(
-                '    ei->CreateFB( task->output[task->createOutputIdx + %d], "%s"%s%s );'
-                % (outputIdx, name, getSeparator(args), ", ".join(args))
-            )
-        outputIdx = outputIdx + 1
-
     if len(CURTASK_FUNC) > 0:
-        writeIdx = 0
-        readIdx = 0
-        for t, name, args in CURTASK_IO:
-            if t.startswith("Write_Buffer"):
-                OUTPUT_FILE_BUFFER.append(
-                    "    auto %s = ei->GetEngineBufferObject( task->output[%d] );"
-                    % (name, writeIdx)
-                )
-                writeIdx = writeIdx + 1
-            if t.startswith("Write_TextureFB"):
-                OUTPUT_FILE_BUFFER.append(
-                    "    auto %s = ei->GetEngineFBObject( task->output[%d] );"
-                    % (name, writeIdx)
-                )
-                writeIdx = writeIdx + 1
-            if t.startswith("Read_Buffer"):
-                OUTPUT_FILE_BUFFER.append(
-                    "    auto %s = ei->GetEngineBufferObject( task->input[%d] );"
-                    % (name, readIdx)
-                )
-                readIdx = readIdx + 1
-            if t.startswith("Read_TextureFB"):
-                OUTPUT_FILE_BUFFER.append(
-                    "    auto %s = ei->GetEngineFBObject( task->input[%d] );"
-                    % (name, readIdx)
-                )
-                readIdx = readIdx + 1
+        for i, (t, name, args) in enumerate(CURTASK_IO):
+            getter = "GetEngineBufferObject" if IOTYPE_TO_ATTACH[t] == "VRDG_TYPE_BUFFER" else "GetEngineFBObject"
+            OUTPUT_FILE_BUFFER.append(
+                "    auto %s = ei->%s( task->uses[%d].id );" % (name, getter, i)
+            )
         OUTPUT_FILE_BUFFER.append("    %s( %s );" % (CURTASK_FUNC, ", ".join(callArgs)))
     if len(CURTASK_GPU_PROFILE) > 0:
-        timerId = generateTimerIdFromName(CURTASK_GPU_PROFILE)
         OUTPUT_FILE_BUFFER.append("    VRDG_GPU_PROFILE_END( %dULL );" % timerId)
     OUTPUT_FILE_BUFFER.append("}\n")
 
-    outputIdx = 0
     OUTPUT_FILE_BUFFER.append("// %s" % CURTASK_SOURCE)
     OUTPUT_FILE_BUFFER.append(
-        "void %s( State* s%s%s )"
-        % (CURTASK_NAME, getSeparator(inputArgs), ", ".join(inputArgs))
+        "void %s( State* s%s%s )" % (CURTASK_NAME, getSeparator(inputArgs), ", ".join(inputArgs))
     )
     OUTPUT_FILE_BUFFER.append("{")
     OUTPUT_FILE_BUFFER.append("    Task task;")
     OUTPUT_FILE_BUFFER.append('    task.name = "%s";\n' % CURTASK_NAME)
     for t, name, args in CURTASK_IO:
-        if t.startswith("Write_"):
-            OUTPUT_FILE_BUFFER.append("    task.output.push_back( %s );" % name)
-            OUTPUT_FILE_BUFFER.append(
-                "    task.outputType.push_back( %s );\n" % IOTYPE_TO_ATTACH[t]
-            )
-            outputIdx = outputIdx + 1
-        if t.startswith("Read_"):
-            OUTPUT_FILE_BUFFER.append("    task.input.push_back( %s );" % name)
-            OUTPUT_FILE_BUFFER.append(
-                "    task.inputType.push_back( %s );\n" % IOTYPE_TO_ATTACH[t]
-            )
-    OUTPUT_FILE_BUFFER.append("    task.createOutputIdx = %d;\n" % outputIdx)
-    for t, name, args in CURTASK_CREATE:
-        OUTPUT_FILE_BUFFER.append("    %s = s->currentBuildPlaceholderID++;" % name)
-        OUTPUT_FILE_BUFFER.append("    task.output.push_back( %s );" % name)
         OUTPUT_FILE_BUFFER.append(
-            "    task.outputType.push_back( %s );\n" % IOTYPE_TO_ATTACH[t]
+            "    task.uses.push_back( { %s, %s, %s } );" % (name, IOTYPE_TO_ATTACH[t], getAccessFlags(t, args))
         )
+    for t, name, args in CURTASK_CREATE:
+        OUTPUT_FILE_BUFFER.append("    %s = s->resources.size();" % name)
+        OUTPUT_FILE_BUFFER.append("    {")
+        OUTPUT_FILE_BUFFER.append("        Resource resource;")
+        OUTPUT_FILE_BUFFER.append("        resource.id = %s;" % name)
+        OUTPUT_FILE_BUFFER.append('        resource.name = "%s";' % name)
+        OUTPUT_FILE_BUFFER.append("        resource.type = %s;" % IOTYPE_TO_ATTACH[t])
+        OUTPUT_FILE_BUFFER.append("        resource.lifetime = VRDG_%s;" % CURTASK_LIFETIME.get(name, "Transient").upper())
+        OUTPUT_FILE_BUFFER.append("        resource.declarationTask = ( int ) s->tasks.size();")
+        OUTPUT_FILE_BUFFER.append("        resource.resolveDescriptor = []( State* state, EngineInterface* ei, Task* task, Resource* resource ) {")
+        field, desc = ("buffer", "BufferDesc") if t == "Create_Buffer" else ("fb", "FBDesc")
+        OUTPUT_FILE_BUFFER.append("            resource->%s = %s( %s );" % (field, desc, ", ".join(args)))
+        OUTPUT_FILE_BUFFER.append("        };")
+        OUTPUT_FILE_BUFFER.append("        s->resources.push_back( resource );")
+        OUTPUT_FILE_BUFFER.append("    }")
     OUTPUT_FILE_BUFFER.append("    task.callback = %s_CallbackBody;" % CURTASK_NAME)
-    if CURTASK_TYPE == "graphics":
-        OUTPUT_FILE_BUFFER.append("    task.flags = VRDG_GRAPHICS;")
-    else:
-        OUTPUT_FILE_BUFFER.append("    task.flags = VRDG_COMPUTE;")
+    OUTPUT_FILE_BUFFER.append("    task.flags = %s;" % ("VRDG_GRAPHICS" if CURTASK_TYPE == "graphics" else "VRDG_COMPUTE"))
     OUTPUT_FILE_BUFFER.append("    s->tasks.push_back( task );")
-
     OUTPUT_FILE_BUFFER.append("}\n")
-
-    return ""
 
 
 def parseSourceFile(fileName):
@@ -267,6 +235,7 @@ def parseSourceFile(fileName):
     global CURTASK_TYPE
     global CURTASK_IO
     global CURTASK_CREATE
+    global CURTASK_LIFETIME
     global CURTASK_CPU_PROFILE
     global CURTASK_GPU_PROFILE
     global CURTASK_FUNC
@@ -296,6 +265,7 @@ def parseSourceFile(fileName):
             )
             CURTASK_IO = []
             CURTASK_CREATE = []
+            CURTASK_LIFETIME = {}
             CURTASK_CPU_PROFILE = ""
             CURTASK_GPU_PROFILE = ""
             CURTASK_FUNC = ""
@@ -306,19 +276,50 @@ def parseSourceFile(fileName):
                 CURTASK_TYPE = "compute"
         elif line.startswith("End_Task"):
             if not CURTASK_OPEN: _abort(fileName, lineIndex, "End_Task without matching Graphics_Task/Compute_Task.")
+            declared = [name for t, name, args in CURTASK_CREATE]
+            if len(set(declared)) != len(declared):
+                _abort(fileName, lineIndex, "duplicate resource declaration")
+            for name in CURTASK_LIFETIME:
+                if name not in declared:
+                    _abort(fileName, lineIndex, "Lifetime requires a resource declared in this task: %s" % name)
+            if any(name in declared for t, name, args in CURTASK_IO):
+                _abort(fileName, lineIndex, "declare resources before accessing them in a later task")
             generateCurrentTask()
             CURTASK_OPEN = False
-        elif line.startswith("Write_Buffer"):
-            CURTASK_IO.append(("Write_Buffer", lineArgs[0], []))
-        elif line.startswith("Read_Buffer"):
-            CURTASK_IO.append(("Read_Buffer", lineArgs[0], []))
-        elif line.startswith("Write_TextureFB"):
-            CURTASK_IO.append(("Write_TextureFB", lineArgs[0], []))
-        elif line.startswith("Read_TextureFB"):
-            CURTASK_IO.append(("Read_TextureFB", lineArgs[0], []))
+        elif line.split("(", 1)[0].strip() in IOTYPE_TO_FUNCTIONARG and not line.startswith("Create_"):
+            if not CURTASK_OPEN:
+                _abort(fileName, lineIndex, "resource access outside task")
+            t = line.split("(", 1)[0].strip()
+            if not lineArgs or not lineArgs[0] or len(lineArgs) > 2:
+                _abort(fileName, lineIndex, "invalid resource access")
+            if len(lineArgs) == 2 and (not t.startswith("Write_") or lineArgs[1] != "Discard"):
+                _abort(fileName, lineIndex, "Discard is only valid on Write_* accesses")
+            name, args = lineArgs[0], lineArgs[1:]
+            for i, (previous, previousName, previousArgs) in enumerate(CURTASK_IO):
+                if previousName != name:
+                    continue
+                if IOTYPE_TO_ATTACH[previous] != IOTYPE_TO_ATTACH[t]:
+                    _abort(fileName, lineIndex, "conflicting resource types")
+                if (args or previousArgs) and (t != previous or args != previousArgs):
+                    _abort(fileName, lineIndex, "conflicting discard access")
+                if t != previous:
+                    CURTASK_IO[i] = ("ReadWrite_" + t.split("_", 1)[1], name, [])
+                break
+            else:
+                CURTASK_IO.append((t, name, args))
+        elif line.startswith("Lifetime"):
+            if not CURTASK_OPEN or len(lineArgs) != 2 or lineArgs[1] not in ("Transient", "Persistent", "Imported"):
+                _abort(fileName, lineIndex, "Lifetime requires (resource, Transient|Persistent|Imported) inside a task")
+            if lineArgs[0] in CURTASK_LIFETIME:
+                _abort(fileName, lineIndex, "duplicate Lifetime declaration")
+            CURTASK_LIFETIME[lineArgs[0]] = lineArgs[1]
         elif line.startswith("Create_Buffer"):
+            if not CURTASK_OPEN or len(lineArgs) != 4 or not all(lineArgs):
+                _abort(fileName, lineIndex, "Create_Buffer requires (name, size, format, flags) inside a task")
             CURTASK_CREATE.append(("Create_Buffer", lineArgs[0], lineArgs[1:]))
         elif line.startswith("Create_TextureFB"):
+            if not CURTASK_OPEN or len(lineArgs) not in (5, 6) or not all(lineArgs):
+                _abort(fileName, lineIndex, "Create_TextureFB requires (name, width, height, format, mips[, flags]) inside a task")
             CURTASK_CREATE.append(("Create_TextureFB", lineArgs[0], lineArgs[1:]))
         elif line.startswith("CPU_Profile"):
             CURTASK_CPU_PROFILE = lineArgs[0]

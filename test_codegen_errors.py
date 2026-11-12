@@ -98,6 +98,26 @@ def run_tests():
         expect_text="Duplicate GPU_Profile name",
     )
 
+    # Resource declarations and access intent must be unambiguous.
+    invalid_resources = [
+        ("Read cannot discard", "Read_TextureFB(tex, Discard)", "Discard is only valid"),
+        ("Read/write cannot discard", "ReadWrite_Buffer(buf, Discard)", "Discard is only valid"),
+        ("Unknown write intent", "Write_Buffer(buf, Maybe)", "Discard is only valid"),
+        ("Missing access name", "Write_Buffer()", "invalid resource access"),
+        ("Conflicting read and discard", "Read_Buffer(buf)\n///>Write_Buffer(buf, Discard)", "conflicting discard access"),
+        ("Conflicting preserving and discard writes", "Write_Buffer(buf)\n///>Write_Buffer(buf, Discard)", "conflicting discard access"),
+        ("Conflicting resource types", "Read_Buffer(buf)\n///>Read_TextureFB(buf)", "conflicting resource types"),
+        ("Invalid lifetime", "Lifetime(tex, Forever)", "Lifetime requires"),
+        ("Undeclared lifetime", "Lifetime(tex, Persistent)", "Lifetime requires a resource declared"),
+        ("Duplicate lifetime", "Lifetime(tex, Persistent)\n///>Lifetime(tex, Imported)", "duplicate Lifetime"),
+        ("Incomplete buffer descriptor", "Create_Buffer(buf, 4, 0)", "Create_Buffer requires"),
+        ("Incomplete texture descriptor", "Create_TextureFB(tex, 16, 16, 0)", "Create_TextureFB requires"),
+        ("Duplicate declaration", "Create_Buffer(buf, 4, 0, 0)\n///>Create_Buffer(buf, 4, 0, 0)", "duplicate resource declaration"),
+    ]
+    for description, body, diagnostic in invalid_resources:
+        rc, out = run_vrdg("///>Graphics_Task(A)\n///>" + body + "\n///>End_Task\n")
+        success &= check(description, rc, out, True, diagnostic)
+
     # Valid minimal task succeeds
     rc, out = run_vrdg("///>Graphics_Task(GoodTask)\n///>End_Task\n")
     success &= check(

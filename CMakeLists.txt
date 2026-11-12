@@ -35,7 +35,7 @@ enable_testing()
 
 # Add test that runs verify.py
 add_test(NAME vrdg_verify
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/verify.py
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/verify.py $<TARGET_FILE:vrdg_test>
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -44,3 +44,15 @@ add_test(NAME vrdg_codegen_errors
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_codegen_errors.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+# Resource lifecycle tests use a separate generated graph.
+set(RESOURCE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/test_resources.h")
+add_custom_command(
+    OUTPUT ${RESOURCE_HEADER}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vrdg.py ${CMAKE_CURRENT_SOURCE_DIR}/test_resources.cpp > ${RESOURCE_HEADER}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/vrdg.py ${CMAKE_CURRENT_SOURCE_DIR}/test_resources.cpp
+    COMMENT "Generating test_resources.h using vrdg.py"
+)
+add_executable(vrdg_resources_test test_resources.cpp ${RESOURCE_HEADER})
+target_include_directories(vrdg_resources_test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+add_test(NAME vrdg_resources COMMAND vrdg_resources_test)
