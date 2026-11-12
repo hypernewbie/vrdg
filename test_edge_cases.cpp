@@ -391,7 +391,14 @@ void TestAccessValidation()
         { write, discard }, { discard, write },
         { readWrite, discard }, { discard, readWrite },
         { { 1, VRDG_TYPE_BUFFER, VRDG_READ } },
-        { { 0, VRDG_TYPE_FB, VRDG_READ } }
+        { { 0, VRDG_TYPE_FB, VRDG_READ } },
+        { { 0, VRDG_TYPE_BUFFER, VRDG_WRITE | VRDG_SAMPLED } },
+        { { 0, VRDG_TYPE_BUFFER, VRDG_READ | VRDG_COLOR } },
+        { { 0, VRDG_TYPE_BUFFER, VRDG_WRITE | VRDG_INDIRECT } },
+        { { 0, VRDG_TYPE_BUFFER, VRDG_READ | VRDG_WRITE | VRDG_COPY } },
+        { { 0, VRDG_TYPE_BUFFER, VRDG_READ | VRDG_STORAGE }, { 0, VRDG_TYPE_BUFFER, VRDG_WRITE | VRDG_COPY } },
+        { { 0, VRDG_TYPE_BUFFER, VRDG_READ | VRDG_DISCARD } },
+        { { 0, VRDG_TYPE_BUFFER, VRDG_READ | VRDG_WRITE | VRDG_DISCARD } }
     };
     for( auto& accesses : invalid ) {
         AccessEngine test;

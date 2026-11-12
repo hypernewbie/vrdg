@@ -63,7 +63,14 @@ enum TransitionFlagBits
     VRDG_WRITE = 0x2,
     VRDG_GRAPHICS = 0x4,
     VRDG_COMPUTE = 0x8,
-    VRDG_DISCARD = 0x10
+    VRDG_DISCARD = 0x10,
+    VRDG_COLOR = 0x20,
+    VRDG_DEPTH = 0x40,
+    VRDG_SAMPLED = 0x80,
+    VRDG_STORAGE = 0x100,
+    VRDG_COPY = 0x200,
+    VRDG_INDIRECT = 0x400,
+    VRDG_USAGE_MASK = VRDG_COLOR | VRDG_DEPTH | VRDG_SAMPLED | VRDG_STORAGE | VRDG_COPY | VRDG_INDIRECT
 };
 
 enum AttachmentType
@@ -146,6 +153,50 @@ struct State
     std::vector< Resource > resources;
     bool compiled = false;
 };
+
+inline std::string DescribeFlags( uint64_t flags )
+{
+    const struct { uint64_t bit; const char* name; } names[] = {
+        { VRDG_READ, "read" }, { VRDG_WRITE, "write" },
+        { VRDG_GRAPHICS, "graphics" }, { VRDG_COMPUTE, "compute" }, { VRDG_DISCARD, "discard" },
+        { VRDG_COLOR, "color" }, { VRDG_DEPTH, "depth" }, { VRDG_SAMPLED, "sampled" },
+        { VRDG_STORAGE, "storage" }, { VRDG_COPY, "copy" }, { VRDG_INDIRECT, "indirect" }
+    };
+    std::string text;
+    for( const auto& entry : names ) {
+        if ( flags & entry.bit ) {
+            if ( !text.empty() ) text += "|";
+            text += entry.name;
+            flags &= ~entry.bit;
+        }
+    }
+    if ( flags ) text += ( text.empty() ? "" : "|" ) + std::string( "unknown=" ) + std::to_string( flags );
+    return text.empty() ? "none" : text;
+}
+
+inline const char* AccessError( AttachmentType type, uint64_t flags, uint32_t taskFlags )
+{
+    uint64_t roles = flags & VRDG_USAGE_MASK;
+    if ( !( flags & ( VRDG_READ | VRDG_WRITE ) ) )
+        return "access requires read or write";
+    if ( ( flags & VRDG_DISCARD ) && ( !( flags & VRDG_WRITE ) || ( flags & VRDG_READ ) ) )
+        return "discard access cannot read existing contents";
+    if ( type == VRDG_TYPE_BUFFER && ( roles & ( VRDG_COLOR | VRDG_DEPTH | VRDG_SAMPLED ) ) )
+        return "buffer access cannot use texture roles";
+    if ( type == VRDG_TYPE_FB && ( roles & VRDG_INDIRECT ) )
+        return "indirect access requires a buffer";
+    if ( ( roles & ( VRDG_COLOR | VRDG_DEPTH ) ) && !( taskFlags & VRDG_GRAPHICS ) )
+        return "attachment access requires a graphics task";
+    if ( ( roles & ( VRDG_SAMPLED | VRDG_INDIRECT ) ) && ( flags & VRDG_WRITE ) )
+        return "sampled and indirect access must be read-only";
+    if ( ( roles & VRDG_COLOR ) && !( flags & VRDG_WRITE ) )
+        return "color attachment access must write";
+    if ( ( roles & VRDG_COPY ) && ( flags & VRDG_READ ) && ( flags & VRDG_WRITE ) )
+        return "copy access must be read-only or write-only";
+    if ( ( flags & VRDG_WRITE ) && ( roles & ( roles - 1 ) ) )
+        return "conflicting access roles";
+    return nullptr;
+}
 
 inline std::logic_error ResourceError( const State* state, int taskIndex, uint64_t id, const std::string& message )
 {
@@ -255,6 +306,8 @@ inline void Compile( State* state, EngineInterface* ei )
             auto& use = task.uses[j];
             if ( use.id >= state->resources.size() || state->resources[use.id].type != use.type )
                 throw ResourceError( state, i, use.id, "access requires a matching resource declaration" );
+            if ( const char* error = AccessError( use.type, use.flags, task.flags ) )
+                throw ResourceError( state, i, use.id, std::string( error ) + " (" + DescribeFlags( use.flags ) + ")" );
 
             // Keep callback argument slots. Repeated IDs transition through their first slot.
             for( int k = 0; k < j; k++ ) {
@@ -265,8 +318,8 @@ inline void Compile( State* state, EngineInterface* ei )
                     throw ResourceError( state, i, use.id, "conflicting discard and preserving writes" );
                 previous.flags |= use.flags;
                 use.flags = 0;
-                if ( ( previous.flags & VRDG_DISCARD ) && ( previous.flags & VRDG_READ ) )
-                    throw ResourceError( state, i, use.id, "discard access cannot read existing contents" );
+                if ( const char* error = AccessError( previous.type, previous.flags, task.flags ) )
+                    throw ResourceError( state, i, use.id, std::string( error ) + " (" + DescribeFlags( previous.flags ) + ")" );
                 break;
             }
             auto& resource = state->resources[use.id];

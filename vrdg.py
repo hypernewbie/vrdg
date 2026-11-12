@@ -75,6 +75,15 @@ for suffix in ("Buffer", "TextureFB"):
     IOTYPE_TO_ENGINE_FUNCTIONARG[t] = IOTYPE_TO_ENGINE_FUNCTIONARG["Read_" + suffix]
     IOTYPE_TO_ATTACH[t] = IOTYPE_TO_ATTACH["Read_" + suffix]
 
+ACCESS_ROLES = {
+    "Color": ("TextureFB", ("Write", "ReadWrite"), "graphics"),
+    "Depth": ("TextureFB", ("Read", "Write", "ReadWrite"), "graphics"),
+    "Sampled": ("TextureFB", ("Read",), None),
+    "Storage": (None, ("Read", "Write", "ReadWrite"), None),
+    "Copy": (None, ("Read", "Write"), None),
+    "Indirect": ("Buffer", ("Read",), None),
+}
+
 # ---------------------------------------------------- Helper functions ----------------------------------------------------------
 
 
@@ -152,11 +161,27 @@ def getSeparator(args):
 
 
 def getAccessFlags(t, args):
+    flags = ["VRDG_READ"] if t.startswith("Read_") else ["VRDG_WRITE"]
     if t.startswith("ReadWrite_"):
-        return "VRDG_READ | VRDG_WRITE"
-    if t.startswith("Read_"):
-        return "VRDG_READ"
-    return "VRDG_WRITE | VRDG_DISCARD" if args else "VRDG_WRITE"
+        flags.insert(0, "VRDG_READ")
+    if "Discard" in args:
+        flags.append("VRDG_DISCARD")
+    flags.extend("VRDG_" + role.upper() for role in ACCESS_ROLES if role in args)
+    return " | ".join(flags)
+
+
+def getAccessError(t, args):
+    access, suffix = t.split("_", 1)
+    roles = [role for role in ACCESS_ROLES if role in args]
+    if "Discard" in args and access != "Write":
+        return "Discard is only valid on Write_* accesses"
+    for role in roles:
+        expectedType, operations, taskType = ACCESS_ROLES[role]
+        if (expectedType and expectedType != suffix) or access not in operations or (taskType and taskType != CURTASK_TYPE):
+            return "invalid access role '%s' for %s in a %s task" % (role, t, CURTASK_TYPE)
+    if access != "Read" and len(roles) > 1:
+        return "conflicting access roles"
+    return None
 
 
 def generateCurrentTask():
@@ -309,20 +334,30 @@ def parseSourceFile(fileName):
             if not CURTASK_OPEN:
                 abort("resource access outside task")
             t = directive
-            if not lineArgs or not lineArgs[0] or len(lineArgs) > 2:
+            if not lineArgs or not all(lineArgs) or len(lineArgs) > 3:
                 abort("invalid resource access")
-            if len(lineArgs) == 2 and (not t.startswith("Write_") or lineArgs[1] != "Discard"):
-                abort("Discard is only valid on Write_* accesses")
             name, args = lineArgs[0], lineArgs[1:]
+            if args and args[-1] == "Discard":
+                roles = args[:-1]
+            else:
+                roles = args
+            if len(roles) > 1 or (roles and roles[0] not in ACCESS_ROLES):
+                abort("expected one access role followed by optional Discard")
+            error = getAccessError(t, args)
+            if error: abort(error)
             for i, (previous, previousName, previousArgs) in enumerate(CURTASK_IO):
                 if previousName != name:
                     continue
                 if IOTYPE_TO_ATTACH[previous] != IOTYPE_TO_ATTACH[t]:
                     abort("conflicting resource types")
-                if (args or previousArgs) and (t != previous or args != previousArgs):
+                if ("Discard" in args or "Discard" in previousArgs) and (t != previous or ("Discard" in args) != ("Discard" in previousArgs)):
                     abort("conflicting discard access")
-                if t != previous:
-                    CURTASK_IO[i] = ("ReadWrite_" + t.split("_", 1)[1], name, [])
+                merged = previous if previous == t else "ReadWrite_" + t.split("_", 1)[1]
+                mergedArgs = [role for role in ACCESS_ROLES if role in args or role in previousArgs]
+                if "Discard" in args: mergedArgs.append("Discard")
+                error = getAccessError(merged, mergedArgs)
+                if error: abort(error)
+                CURTASK_IO[i] = (merged, name, mergedArgs)
                 break
             else:
                 CURTASK_IO.append((t, name, args))

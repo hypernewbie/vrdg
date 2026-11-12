@@ -111,7 +111,7 @@ def run_tests():
     invalid_resources = [
         ("Read cannot discard", "Read_TextureFB(tex, Discard)", "Discard is only valid"),
         ("Read/write cannot discard", "ReadWrite_Buffer(buf, Discard)", "Discard is only valid"),
-        ("Unknown write intent", "Write_Buffer(buf, Maybe)", "Discard is only valid"),
+        ("Unknown write intent", "Write_Buffer(buf, Maybe)", "expected one access role"),
         ("Missing access name", "Write_Buffer()", "invalid resource access"),
         ("Conflicting read and discard", "Read_Buffer(buf)\n///>Write_Buffer(buf, Discard)", "conflicting discard access"),
         ("Conflicting preserving and discard writes", "Write_Buffer(buf)\n///>Write_Buffer(buf, Discard)", "conflicting discard access"),
@@ -152,6 +152,31 @@ def run_tests():
     if not re.search(r'task\.source = ".+\.cpp:2";', result.stdout):
         print("  [FAIL] Task metadata must identify the task header line")
         success = False
+
+    invalid_roles = [
+        ("Sampled buffer", "Read_Buffer(buf, Sampled)"),
+        ("Indirect texture", "Read_TextureFB(tex, Indirect)"),
+        ("Sampled write", "Write_TextureFB(tex, Sampled)"),
+        ("Indirect write", "Write_Buffer(buf, Indirect)"),
+        ("Color read", "Read_TextureFB(tex, Color)"),
+        ("Copy read/write", "ReadWrite_Buffer(buf, Copy)"),
+        ("Compute attachment", "Write_TextureFB(tex, Color)"),
+        ("Compute depth", "Read_TextureFB(tex, Depth)"),
+    ]
+    for description, body in invalid_roles:
+        task = "Compute_Task" if description.startswith("Compute") else "Graphics_Task"
+        result = run_vrdg("///>" + task + "(A)\n///>" + body + "\n///>End_Task\n")
+        success &= check(description, result, True, "invalid access role")
+    for body, diagnostic in [
+        ("Read_Buffer(buf, Storage, Discard)", "Discard is only valid"),
+        ("Write_Buffer(buf, Discard, Storage)", "expected one access role"),
+        ("Write_TextureFB(tex, Color)\n///>Write_TextureFB(tex, Storage)", "conflicting access roles"),
+        ("Read_Buffer(buf, Copy)\n///>Write_Buffer(buf, Copy)", "invalid access role"),
+    ]:
+        result = run_vrdg("///>Graphics_Task(A)\n///>" + body + "\n///>End_Task\n")
+        success &= check("Conflicting typed access", result, True, diagnostic)
+    result = run_vrdg("///>Graphics_Task(A)\n///>Read_Buffer(buf, Storage)\n///>Read_Buffer(buf, Indirect)\n///>End_Task\n")
+    success &= check("Compatible named read roles merge", result, False, "VRDG_READ | VRDG_STORAGE | VRDG_INDIRECT")
 
     # Valid minimal task succeeds
     result = run_vrdg("///>Graphics_Task(GoodTask)\n///>End_Task\n")
