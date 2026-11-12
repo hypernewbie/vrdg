@@ -78,3 +78,6 @@ add_custom_command(
 add_executable(vrdg_access_test test_access.cpp ${ACCESS_HEADER})
 target_include_directories(vrdg_access_test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 add_test(NAME vrdg_access COMMAND vrdg_access_test)
+
+add_executable(vrdg_initialization_test test_initialization.cpp)
+add_test(NAME vrdg_initialization COMMAND vrdg_initialization_test)

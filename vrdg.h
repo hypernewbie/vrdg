@@ -267,9 +267,11 @@ public:
         }
     }
 
-    // Before first transition each execution. The engine tracks physical alias occupants.
+    // Establish the alias occupant, then supply required initial contents before the first transition.
     virtual void ActivateResource( State* state, const Resource& resource, uint64_t flags )
     {
+        if ( resource.lifetime == VRDG_TRANSIENT && !( flags & VRDG_DISCARD ) )
+            throw ResourceError( state, resource.firstUse, resource.id, "first access needs initial contents; use a discard write or initialize during activation" );
     }
 
     virtual void HashGraphConfigOptions( uint64_t& hash0, uint64_t& hash1 )

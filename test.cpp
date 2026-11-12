@@ -59,70 +59,70 @@
 // A->B->C->D->E->F->G->H->I->J linear dependency chain
 
 ///> Graphics_Task( Chain_A )
-///>     Write_Buffer( buf_a )
+///>     Write_Buffer( buf_a, Discard )
 ///>     CPU_Profile( Chain_A )
 ///>     Func( ChainA_Func )
 ///> End_Task
 
 ///> Graphics_Task( Chain_B )
 ///>     Read_Buffer( buf_a )
-///>     Write_Buffer( buf_b )
+///>     Write_Buffer( buf_b, Discard )
 ///>     CPU_Profile( Chain_B )
 ///>     Func( ChainB_Func )
 ///> End_Task
 
 ///> Graphics_Task( Chain_C )
 ///>     Read_Buffer( buf_b )
-///>     Write_Buffer( buf_c )
+///>     Write_Buffer( buf_c, Discard )
 ///>     CPU_Profile( Chain_C )
 ///>     Func( ChainC_Func )
 ///> End_Task
 
 ///> Graphics_Task( Chain_D )
 ///>     Read_Buffer( buf_c )
-///>     Write_Buffer( buf_d )
+///>     Write_Buffer( buf_d, Discard )
 ///>     CPU_Profile( Chain_D )
 ///>     Func( ChainD_Func )
 ///> End_Task
 
 ///> Graphics_Task( Chain_E )
 ///>     Read_Buffer( buf_d )
-///>     Write_Buffer( buf_e )
+///>     Write_Buffer( buf_e, Discard )
 ///>     CPU_Profile( Chain_E )
 ///>     Func( ChainE_Func )
 ///> End_Task
 
 ///> Graphics_Task( Chain_F )
 ///>     Read_Buffer( buf_e )
-///>     Write_Buffer( buf_f )
+///>     Write_Buffer( buf_f, Discard )
 ///>     CPU_Profile( Chain_F )
 ///>     Func( ChainF_Func )
 ///> End_Task
 
 ///> Graphics_Task( Chain_G )
 ///>     Read_Buffer( buf_f )
-///>     Write_Buffer( buf_g )
+///>     Write_Buffer( buf_g, Discard )
 ///>     CPU_Profile( Chain_G )
 ///>     Func( ChainG_Func )
 ///> End_Task
 
 ///> Graphics_Task( Chain_H )
 ///>     Read_Buffer( buf_g )
-///>     Write_Buffer( buf_h )
+///>     Write_Buffer( buf_h, Discard )
 ///>     CPU_Profile( Chain_H )
 ///>     Func( ChainH_Func )
 ///> End_Task
 
 ///> Graphics_Task( Chain_I )
 ///>     Read_Buffer( buf_h )
-///>     Write_Buffer( buf_i )
+///>     Write_Buffer( buf_i, Discard )
 ///>     CPU_Profile( Chain_I )
 ///>     Func( ChainI_Func )
 ///> End_Task
 
 ///> Graphics_Task( Chain_J )
 ///>     Read_Buffer( buf_i )
-///>     Write_Buffer( buf_j )
+///>     Write_Buffer( buf_j, Discard )
 ///>     CPU_Profile( Chain_J )
 ///>     Func( ChainJ_Func )
 ///> End_Task
@@ -132,28 +132,28 @@
 
 ///> Graphics_Task( Diamond_1 )
 ///>     Read_Buffer( buf_j )
-///>     Write_Buffer( buf_k )
+///>     Write_Buffer( buf_k, Discard )
 ///>     CPU_Profile( Diamond_1 )
 ///>     Func( Diamond1_Func )
 ///> End_Task
 
 ///> Graphics_Task( Diamond_2 )
 ///>     Read_Buffer( buf_j )
-///>     Write_Buffer( buf_l )
+///>     Write_Buffer( buf_l, Discard )
 ///>     CPU_Profile( Diamond_2 )
 ///>     Func( Diamond2_Func )
 ///> End_Task
 
 ///> Graphics_Task( Diamond_3 )
 ///>     Read_Buffer( buf_j )
-///>     Write_TextureFB( fb_p )
+///>     Write_TextureFB( fb_p, Discard )
 ///>     CPU_Profile( Diamond_3 )
 ///>     Func( Diamond3_Func )
 ///> End_Task
 
 ///> Graphics_Task( Diamond_4 )
 ///>     Read_Buffer( buf_j )
-///>     Write_TextureFB( fb_q )
+///>     Write_TextureFB( fb_q, Discard )
 ///>     CPU_Profile( Diamond_4 )
 ///>     Func( Diamond4_Func )
 ///> End_Task
@@ -164,7 +164,7 @@
 ///>     Read_Buffer( buf_l )
 ///>     Read_TextureFB( fb_p )
 ///>     Read_TextureFB( fb_q )
-///>     Write_Buffer( buf_m )
+///>     Write_Buffer( buf_m, Discard )
 ///>     CPU_Profile( Diamond_Merge )
 ///>     Func( DiamondMerge_Func )
 ///> End_Task
@@ -174,21 +174,21 @@
 
 ///> Compute_Task( Compute_1 )
 ///>     Read_Buffer( buf_m )
-///>     Write_TextureFB( fb_r )
+///>     Write_TextureFB( fb_r, Discard )
 ///>     CPU_Profile( Compute_1 )
 ///>     Func( Compute1_Func )
 ///> End_Task
 
 ///> Compute_Task( Compute_2 )
 ///>     Read_TextureFB( fb_r )
-///>     Write_TextureFB( fb_s )
+///>     Write_TextureFB( fb_s, Discard )
 ///>     CPU_Profile( Compute_2 )
 ///>     Func( Compute2_Func )
 ///> End_Task
 
 ///> Graphics_Task( Graphics_1 )
 ///>     Read_TextureFB( fb_s )
-///>     Write_TextureFB( fb_t )
+///>     Write_TextureFB( fb_t, Discard )
 ///>     CPU_Profile( Graphics_1 )
 ///>     Func( Graphics1_Func )
 ///> End_Task
@@ -197,41 +197,41 @@
 // Two parallel independent chains for stress testing
 
 ///> Graphics_Task( Parallel_A1 )
-///>     Write_Buffer( buf_n )
+///>     Write_Buffer( buf_n, Discard )
 ///>     CPU_Profile( Parallel_A1 )
 ///>     Func( ParallelA1_Func )
 ///> End_Task
 
 ///> Graphics_Task( Parallel_A2 )
 ///>     Read_Buffer( buf_n )
-///>     Write_TextureFB( fb_u )
+///>     Write_TextureFB( fb_u, Discard )
 ///>     CPU_Profile( Parallel_A2 )
 ///>     Func( ParallelA2_Func )
 ///> End_Task
 
 ///> Graphics_Task( Parallel_A3 )
 ///>     Read_TextureFB( fb_u )
-///>     Write_TextureFB( fb_v )
+///>     Write_TextureFB( fb_v, Discard )
 ///>     CPU_Profile( Parallel_A3 )
 ///>     Func( ParallelA3_Func )
 ///> End_Task
 
 ///> Graphics_Task( Parallel_B1 )
-///>     Write_Buffer( buf_o )
+///>     Write_Buffer( buf_o, Discard )
 ///>     CPU_Profile( Parallel_B1 )
 ///>     Func( ParallelB1_Func )
 ///> End_Task
 
 ///> Graphics_Task( Parallel_B2 )
 ///>     Read_Buffer( buf_o )
-///>     Write_TextureFB( fb_w )
+///>     Write_TextureFB( fb_w, Discard )
 ///>     CPU_Profile( Parallel_B2 )
 ///>     Func( ParallelB2_Func )
 ///> End_Task
 
 ///> Graphics_Task( Parallel_B3 )
 ///>     Read_TextureFB( fb_w )
-///>     Write_TextureFB( fb_x )
+///>     Write_TextureFB( fb_x, Discard )
 ///>     CPU_Profile( Parallel_B3 )
 ///>     Func( ParallelB3_Func )
 ///> End_Task
@@ -243,7 +243,7 @@
 ///>     Read_TextureFB( fb_v )
 ///>     Read_TextureFB( fb_x )
 ///>     Read_TextureFB( fb_t )
-///>     Write_TextureFB( fb_y )
+///>     Write_TextureFB( fb_y, Discard )
 ///>     CPU_Profile( Parallel_Merge )
 ///>     Func( ParallelMerge_Func )
 ///> End_Task

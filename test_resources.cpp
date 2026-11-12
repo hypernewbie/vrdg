@@ -91,7 +91,8 @@ public:
     uint32_t width = 64;
     int buildCount = 0, config = 0;
     bool simple = false, conflicting = false;
-    bool failHistory = false;
+    bool failHistory = false, historyNeedsInit = false;
+    int simpleContents = -1;
     vrdg::FBDesc historyDesc;
     uint64_t objectSerial = 0;
     int historyContents = 0;
@@ -149,8 +150,9 @@ public:
                 failHistory = false;
                 throw std::runtime_error( "mock allocation failure" );
             }
-            historyContents = 0; // The engine chooses to invalidate on resize.
+            historyNeedsInit = true;
         }
+        if ( simple ) simpleContents = -1;
         objects[id] = ++objectSerial;
         events.push_back( "create" + std::to_string( id ) );
     }
@@ -200,6 +202,17 @@ public:
         Check( !activated[id] && objects[id] != 0, "activation after preparation, once per execution" );
         activated[id] = true;
         events.push_back( "activate" + std::to_string( id ) );
+        if ( simple ) {
+            simpleContents = 0;
+            events.push_back( "initialize0" );
+        }
+        else if ( id == 3 && historyNeedsInit ) {
+            historyContents = 0;
+            historyNeedsInit = false;
+            events.push_back( "initialize3" );
+        }
+        else if ( resource.lifetime == vrdg::VRDG_TRANSIENT )
+            vrdg::EngineInterface::ActivateResource( s, resource, flags );
         if ( id == 1 || id == 2 ) {
             Check( flags == ( id == 1 ? 22 : 26 ), "alias occupant starts with an explicit discard write" );
             if ( occupant >= 0 ) {
@@ -297,7 +310,7 @@ void Merged_Func( VRDG_FRAMEBUFFER history )
 
 void ReadSimple_Func( VRDG_FRAMEBUFFER texture )
 {
-    Check( texture == engine->objects[0], "simple callback handle" );
+    Check( texture == engine->objects[0] && engine->simpleContents == 0, "engine supplies initial contents for a first read" );
     engine->events.push_back( "simple" );
 }
 
@@ -332,12 +345,17 @@ void RunGraph( vrdg::State& state, ResourceEngine& test, bool createHistory, int
         "activate0", "transition1:22", "transition0:22", "get1", "get0", "writeA",
         "activate6", "transition1:5", "transition6:22", "get1", "get6", "readA", "release1",
         "activate2", "handoff1to2", "transition6:9", "transition2:26", "get6", "get2", "writeB", "release6",
-        "activate3", "activate4", "transition2:5", "transition0:7", "transition3:7", "transition4:5",
+        "activate3"
+    };
+    expected.insert( expected.end(), rest, rest + sizeof( rest ) / sizeof( rest[0] ) );
+    if ( createHistory ) expected.push_back( "initialize3" );
+    const char* finish[] = {
+        "activate4", "transition2:5", "transition0:7", "transition3:7", "transition4:5",
         "get2", "get0", "get3", "get4", "finish", "release2",
         "transition0:7", "get0", "get0", "combined", "release0",
         "transition3:11", "get3", "merged"
     };
-    expected.insert( expected.end(), rest, rest + sizeof( rest ) / sizeof( rest[0] ) );
+    expected.insert( expected.end(), finish, finish + sizeof( finish ) / sizeof( finish[0] ) );
     CheckEvents( test.events, expected );
     Check( test.historyContents == historyContents, "persistent contents follow engine reuse/invalidation decisions" );
 }
@@ -398,7 +416,7 @@ int main()
         simple.width = 64 + i * 64;
         vrdg::Compile( &simpleState, &simple );
         vrdg::Run( &simpleState, &simple );
-        CheckEvents( simple.events, { "resolve", "prepare", "create0", "activate0", "transition0:5", "get0", "simple", "release0" } );
+        CheckEvents( simple.events, { "resolve", "prepare", "create0", "activate0", "initialize0", "transition0:5", "get0", "simple", "release0" } );
     }
     Check( simple.buildCount == 1, "existing annotations use the same execution path" );
     std::puts( "[PASS] Resource preparation, access, alias and ownership tests" );
