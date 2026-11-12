@@ -56,3 +56,14 @@ add_custom_command(
 add_executable(vrdg_resources_test test_resources.cpp ${RESOURCE_HEADER})
 target_include_directories(vrdg_resources_test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 add_test(NAME vrdg_resources COMMAND vrdg_resources_test)
+
+set(EDGE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/test_edge_cases.h")
+add_custom_command(
+    OUTPUT ${EDGE_HEADER}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vrdg.py ${CMAKE_CURRENT_SOURCE_DIR}/test_edge_cases.cpp > ${EDGE_HEADER}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/vrdg.py ${CMAKE_CURRENT_SOURCE_DIR}/test_edge_cases.cpp
+    COMMENT "Generating test_edge_cases.h using vrdg.py"
+)
+add_executable(vrdg_edge_cases_test test_edge_cases.cpp ${EDGE_HEADER})
+target_include_directories(vrdg_edge_cases_test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+add_test(NAME vrdg_edge_cases COMMAND vrdg_edge_cases_test)
