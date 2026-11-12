@@ -81,3 +81,6 @@ add_test(NAME vrdg_access COMMAND vrdg_access_test)
 
 add_executable(vrdg_initialization_test test_initialization.cpp)
 add_test(NAME vrdg_initialization COMMAND vrdg_initialization_test)
+
+add_executable(vrdg_describe_test test_describe.cpp)
+add_test(NAME vrdg_describe COMMAND vrdg_describe_test)

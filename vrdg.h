@@ -152,6 +152,7 @@ struct State
     std::vector< Task > tasks;
     std::vector< Resource > resources;
     bool compiled = false;
+    bool descriptorsResolved = false;
 };
 
 inline std::string DescribeFlags( uint64_t flags )
@@ -198,18 +199,76 @@ inline const char* AccessError( AttachmentType type, uint64_t flags, uint32_t ta
     return nullptr;
 }
 
+inline std::string Quote( const std::string& value )
+{
+    std::string text = "\"";
+    for( unsigned char c : value ) {
+        if ( c == '"' || c == '\\' ) { text += '\\'; text += c; }
+        else if ( c == '\n' ) text += "\\n";
+        else if ( c == '\r' ) text += "\\r";
+        else if ( c == '\t' ) text += "\\t";
+        else if ( c < 32 || c == 127 ) {
+            const char* hex = "0123456789abcdef";
+            text += "\\x"; text += hex[c >> 4]; text += hex[c & 15];
+        }
+        else text += c;
+    }
+    return text + "\"";
+}
+
+inline std::string Describe( const State& state )
+{
+    std::string text = std::string( "graph compiled=" ) + ( state.compiled ? "true" : "false" ) +
+        " descriptors=" + ( state.descriptorsResolved ? "resolved" : "unresolved" ) +
+        " tasks=" + std::to_string( state.tasks.size() ) + " resources=" + std::to_string( state.resources.size() ) + "\n";
+    for( size_t i = 0; i < state.resources.size(); i++ ) {
+        const auto& r = state.resources[i];
+        const char* type = r.type == VRDG_TYPE_BUFFER ? "buffer" : r.type == VRDG_TYPE_FB ? "texture" : "unknown";
+        const char* lifetime = r.lifetime == VRDG_TRANSIENT ? "transient" : r.lifetime == VRDG_PERSISTENT ? "persistent" : r.lifetime == VRDG_IMPORTED ? "imported" : "unknown";
+        text += "resource " + std::to_string( i ) + " " + Quote( r.name ) + " " + type + " " + lifetime +
+            " declared=" + std::to_string( r.declarationTask ) + " first=" + std::to_string( r.firstUse ) + " last=" + std::to_string( r.lastUse );
+        if ( !state.descriptorsResolved ) text += " descriptor=unresolved";
+        else if ( r.type == VRDG_TYPE_BUFFER )
+            text += " size=" + std::to_string( r.buffer.size ) + " format=" + std::to_string( r.buffer.format ) + " flags=" + std::to_string( r.buffer.flags );
+        else if ( r.type == VRDG_TYPE_FB )
+            text += " width=" + std::to_string( r.fb.width ) + " height=" + std::to_string( r.fb.height ) + " format=" + std::to_string( r.fb.format ) +
+                " mips=" + std::to_string( r.fb.mips ) + " flags=" + std::to_string( r.fb.flags );
+        text += "\n";
+    }
+    for( size_t i = 0; i < state.tasks.size(); i++ ) {
+        const auto& task = state.tasks[i];
+        text += "task " + std::to_string( i ) + " " + Quote( task.name ) + " " + DescribeFlags( task.flags ) + " source=" + Quote( task.source ? task.source : "" ) + "\n";
+        for( size_t j = 0; j < task.uses.size(); j++ ) {
+            const auto& use = task.uses[j];
+            const char* type = use.type == VRDG_TYPE_BUFFER ? "buffer" : use.type == VRDG_TYPE_FB ? "texture" : "unknown";
+            text += "  arg " + std::to_string( j ) + " resource=" + std::to_string( use.id ) + " type=" + type + " access=" + DescribeFlags( use.flags );
+            if ( !use.flags ) {
+                for( size_t k = 0; k < j; k++ ) {
+                    if ( task.uses[k].id == use.id && task.uses[k].flags ) {
+                        text += " merged_into=" + std::to_string( k );
+                        break;
+                    }
+                }
+            }
+            if ( use.id >= state.resources.size() ) text += " undeclared";
+            text += "\n";
+        }
+    }
+    return text;
+}
+
 inline std::logic_error ResourceError( const State* state, int taskIndex, uint64_t id, const std::string& message )
 {
     std::string text = "VRDG: ";
     if ( taskIndex >= 0 && taskIndex < ( int ) state->tasks.size() ) {
         const auto& task = state->tasks[taskIndex];
-        if ( task.source[0] )
+        if ( task.source && task.source[0] )
             text += std::string( task.source ) + ": ";
-        text += "task " + std::to_string( taskIndex ) + " \"" + task.name + "\", ";
+        text += "task " + std::to_string( taskIndex ) + " " + Quote( task.name ) + ", ";
     }
     text += "resource " + std::to_string( id );
     if ( id < state->resources.size() )
-        text += " \"" + state->resources[id].name + "\"";
+        text += " " + Quote( state->resources[id].name );
     return std::logic_error( text + ": " + message );
 }
 
@@ -298,6 +357,7 @@ inline void Compile( State* state, EngineInterface* ei )
         return;
 
     state->compiled = false;
+    state->descriptorsResolved = false;
     state->tasks.clear();
     state->resources.clear();
     ei->Build( state );
@@ -340,8 +400,10 @@ inline void Run( State* state, EngineInterface* ei )
 {
     if ( !state->compiled )
         throw std::logic_error( "VRDG: Compile required before execution" );
+    state->descriptorsResolved = false;
     for( auto& resource : state->resources )
         resource.resolveDescriptor( state, ei, &state->tasks[resource.declarationTask], &resource );
+    state->descriptorsResolved = true;
     ei->PrepareResources( state );
 
     for( int i = 0; i < ( int ) state->tasks.size(); i++ ) {
