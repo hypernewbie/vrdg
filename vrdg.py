@@ -300,7 +300,7 @@ def parseSourceFile(fileName):
             if lineArgs[0] in TASK_SOURCES:
                 abort("duplicate task '%s', first declared at %s" % (lineArgs[0], TASK_SOURCES[lineArgs[0]]))
             CURTASK_NAME = lineArgs[0]
-            CURTASK_LOCATION = "%s:%d" % (fileName.replace("\\", "/"), lineIndex)
+            CURTASK_LOCATION = "%s:%d" % (os.path.basename(fileName), lineIndex)
             TASK_SOURCES[CURTASK_NAME] = CURTASK_LOCATION
             CURTASK_SOURCE = (
                 "Generated from definition in %s. DO NOT EDIT HERE!"

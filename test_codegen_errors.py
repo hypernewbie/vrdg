@@ -149,9 +149,26 @@ def run_tests():
     success &= check("Duplicate task includes first location", result, True, "duplicate task 'A', first declared at")
     result = run_vrdg("// first line\n///>Graphics_Task(A)\n///>End_Task\n")
     success &= check("Task source metadata", result, False, None)
-    if not re.search(r'task\.source = ".+\.cpp:2";', result.stdout):
-        print("  [FAIL] Task metadata must identify the task header line")
+    if not re.search(r'task\.source = "[^/\\"]+\.cpp:2";', result.stdout):
+        print("  [FAIL] Task metadata must contain only the filename and task header line")
         success = False
+
+    with tempfile.TemporaryDirectory() as directory:
+        headers = []
+        for tree in ("private build a", "private build b"):
+            source_dir = os.path.join(directory, tree)
+            os.mkdir(source_dir)
+            source = os.path.join(source_dir, "passes.cpp")
+            with open(source, "w", encoding="utf-8") as f:
+                f.write("// first line\n///>Graphics_Task(A)\n///>End_Task\n")
+            result = subprocess.run(
+                [sys.executable, "vrdg.py", source], capture_output=True, text=True
+            )
+            success &= check("Absolute input emits filename only", result, False, 'task.source = "passes.cpp:2";')
+            headers.append(result.stdout)
+        if headers[0] != headers[1] or directory in "".join(headers):
+            print("  [FAIL] Generated headers must not depend on local directory paths")
+            success = False
 
     invalid_roles = [
         ("Sampled buffer", "Read_Buffer(buf, Sampled)"),

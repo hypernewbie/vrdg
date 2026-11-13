@@ -287,7 +287,7 @@ void TestGeneratedGraph()
     test.later.fb = vrdg::FBDesc( 64, 48, 7, 3, 1ULL << 45 );
     vrdg::State state;
     vrdg::Compile( &state, &test );
-    Check( std::strstr( state.tasks[0].source, "test_edge_cases.cpp:" ) != nullptr, "generated task retains source location" );
+    Check( std::strstr( state.tasks[0].source, "test_edge_cases.cpp:" ) == state.tasks[0].source, "generated task retains only filename and line" );
     RunMixed( state, test );
 
     // Change every descriptor field and all native pointers, without rebuilding.
